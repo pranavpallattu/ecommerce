@@ -16,8 +16,9 @@ const productSchema=new mongoose.Schema({
     description:{
         type:String,
         required:true,
+        trim:true,
         minLength:0,
-        maxLength:50
+        maxLength:100
     },
     quantity:{
         type:Number,
@@ -35,7 +36,35 @@ const productSchema=new mongoose.Schema({
     },
     productImage:{
         type:[String],
-        required:true
+        required:true,
+        validate:{
+            validator:function(arr){
+                         return arr.length>=1 && arr.length<=4
+            },
+            message:"Product must have 1 to 4 images"
+        }
+    },
+    isActive:{
+        type:Boolean,
+        default:true
+    },
+    deletedAt:{
+        type:Date,
+        default:null
+    },
+    status:{
+        type:String,
+        enum:["Available", "Out of stock"],
+        required:true,
+        default:"Available"
+    },
+    offer:{
+        type:Number,
+        default:0
     }
 
+},{
+    timestamps:true
 })
+
+module.exports=mongoose.model("Product",productSchema)
