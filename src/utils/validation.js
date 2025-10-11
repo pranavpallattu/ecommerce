@@ -78,10 +78,76 @@ function validateProductData(req) {
   }
 }
 
+function validateEditProductData(req) {
+  const pattern = /^[a-z0-9\s\-()]+$/i;
+
+  const {
+    productName,
+    category,
+    description,
+    quantity,
+    regularPrice,
+    offer,
+    existingImages,
+    removedImages,
+  } = req.body;
+
+  const files = req.files?.productImage || [];
+
+  // 1️⃣ Product name
+  if (!productName || productName.length < 3 || productName.length > 50 || !pattern.test(productName)) {
+    throw new Error("Product name must be 3–50 characters long and contain only letters, numbers, spaces, -, or ().");
+  }
+
+  // 2️⃣ Description
+  if (!description || description.length < 5 || description.length > 200) {
+    throw new Error("Description should be between 5 and 200 characters.");
+  }
+
+  // 3️⃣ Quantity
+  if (quantity == null || quantity < 0) {
+    throw new Error("Quantity cannot be negative or empty.");
+  }
+
+  // 4️⃣ Category
+  if (!category) {
+    throw new Error("Category cannot be empty.");
+  }
+
+  // 5️⃣ Price validation
+  if (regularPrice == null || regularPrice < 0) {
+    throw new Error("Regular price cannot be negative or empty.");
+  }
+
+  // 6️⃣ Offer validation
+  if (offer != null && (offer < 0 || offer > 100)) {
+    throw new Error("Offer should be between 0 and 100.");
+  }
+
+  // // 7️⃣ Image validation
+  // const totalImages =
+  //   (Array.isArray(existingImages) ? existingImages.length : 0) +
+  //   (Array.isArray(files) ? files.length : 0);
+
+  // if (totalImages < 1) {
+  //   throw new Error("Product must have at least one image.");
+  // }
+
+  // if (totalImages > 4) {
+  //   throw new Error("Product can have a maximum of 4 images.");
+  // }
+
+  // if (removedImages && Array.isArray(removedImages) && removedImages.length > 4) {
+  //   throw new Error("Removed images list cannot exceed 4.");
+  // }
+}
+
+
 
 module.exports = {
   validateSignUpData,
   validateCategoryData,
   validateEditCategoryData,
-  validateProductData
+  validateProductData,
+  validateEditProductData
 };

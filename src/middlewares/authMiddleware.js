@@ -19,7 +19,7 @@ const userAuthMiddleware = async (req, res, next) => {
     req.user = user;
     next();
   } catch (error) {
-    res.status(400).send(error);
+   return res.status(400).send(error);
   }
 };
 
@@ -40,7 +40,7 @@ const adminAuthMiddleware = async (req, res, next) => {
     req.user = admin;
     next();
   } catch (error) {
-    res.status(400).send(error);
+   return res.status(400).send(error);
   }
 };
 

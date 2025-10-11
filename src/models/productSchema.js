@@ -39,7 +39,7 @@ const productSchema=new mongoose.Schema({
         required:true,
         validate:{
             validator:function(arr){
-                         return arr.length>=0 || arr.length<=4
+                         return arr &&  arr.length>=1 && arr.length<=4
             },
             message:"Product must have 1 to 4 images"
         }
@@ -89,7 +89,6 @@ productSchema.pre("findOneAndUpdate",function(next){
     else if(update.quantity>0 && update.isActive==true){
         update.status="Available"
     }
-
     this.setUpdate(update)
     next()
 })

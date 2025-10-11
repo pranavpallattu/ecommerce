@@ -2,20 +2,17 @@ const supabase = require("../config/supabase");
 const sharp = require("sharp");
 const Product = require("../models/productSchema");
 const { generateFileName } = require("../utils/generateFileName");
-const { validateProductData } = require("../utils/validation");
+const {
+  validateProductData,
+  validateEditProductData,
+} = require("../utils/validation");
 const Category = require("../models/categorySchema");
 
 const bucketName = "product-images";
 
 exports.addProductController = async (req, res) => {
-  const {
-    productName,
-    category,
-    description,
-    quantity,
-    regularPrice,
-    offer,
-  } = req.body;
+  const { productName, category, description, quantity, regularPrice, offer } =
+    req.body;
 
   try {
     validateProductData(req);
@@ -29,12 +26,6 @@ exports.addProductController = async (req, res) => {
     }
 
     const files = req.files?.productImage;
-
-    // if (!req.files || req.files.length === 0) {
-    //   return res
-    //     .status(400)
-    //     .json({ message: "At least one product image is required" });
-    // }
 
     let imageUrls = [];
 
@@ -63,14 +54,17 @@ exports.addProductController = async (req, res) => {
       console.log(data);
     }
 
-    const categoryDetails=await Category.findById(category)
-    if(!categoryDetails){
-        res.status(409).json({message:"category not found"})
+    const categoryDetails = await Category.findById(category);
+    if (!categoryDetails) {
+      res.status(409).json({ message: "category not found" });
     }
-    const categoryOffer=categoryDetails.offer || 0
-    const productOffer=offer || 0
-    const applicableOffer=Math.max(Number(productOffer),Number(categoryOffer))
-    const salePrice=regularPrice-(regularPrice * applicableOffer)/100
+    const categoryOffer = categoryDetails.offer || 0;
+    const productOffer = offer || 0;
+    const applicableOffer = Math.max(
+      Number(productOffer),
+      Number(categoryOffer)
+    );
+    const salePrice = regularPrice - (regularPrice * applicableOffer) / 100;
 
     const newProduct = new Product({
       productName,
@@ -96,67 +90,202 @@ exports.addProductController = async (req, res) => {
 
 exports.editProductController = async (req, res) => {
   try {
+    const { id } = req.params;
+    const {
+      productName,
+      category,
+      description,
+      quantity,
+      regularPrice,
+      offer,
+    } = req.body;
+
+    validateEditProductData(req);
+
+    let existingImages = req.body.existingImages || [];
+    let removedImages = req.body.removedImages || [];
+
+    if (existingImages && !Array.isArray(existingImages)) {
+      existingImages = [existingImages];
+    }
+    if (removedImages && !Array.isArray(removedImages)) {
+      removedImages = [removedImages];
+    }
+
+    console.log("existingImages  " + existingImages);
+    console.log("removedImages  " + removedImages);
+
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(406).json({ message: "product not found" });
+    }
+
+    const filePathstoRemove = removedImages.map((url) => {
+      const filename = url.split("/").pop();
+      return filename;
+    });
+
+    console.log(filePathstoRemove);
+
+    if (filePathstoRemove.length > 0) {
+      try {
+        const { error } = await supabase.storage
+          .from(bucketName)
+          .remove(filePathstoRemove);
+        if (error) {
+          console.error("Failed to delete images:", error);
+        }
+      } catch (error) {
+        console.error("Supabase delete error:", error);
+      }
+    }
+
+    const files = req.files?.productImage || [];
+
+    let imageUrls = [];
+
+   try{
+     for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const processedImg = await sharp(file.buffer)
+        .resize(800, 800)
+        .webp({ quality: 80 })
+        .toBuffer();
+
+      const fileName = generateFileName(productName, i);
+      console.log(fileName);
+
+      const { error } = await supabase.storage
+        .from(bucketName)
+        .upload(fileName, processedImg, { contentType: "image/webp" });
+
+      if (error) {
+        console.error("supabase upload error" + error.message);
+
+        return res.status(409).json({ message: "image upload failed" });
+      }
+
+      const { data } = supabase.storage.from(bucketName).getPublicUrl(fileName);
+      imageUrls.push(data.publicUrl);
+      console.log(data);
+    }
+  }
+    catch(error){
+      if(imageUrls.length>0){
+        await supabase.storage
+          .from(bucketName)
+          .remove(filePathstoRemove);
+      }
     
+   }
+
+    const updatedImages = [
+      ...existingImages.filter((img) => !removedImages.includes(img)),
+      ...imageUrls,
+    ];
+
+    if (updatedImages.length < 1) {
+      return res
+        .status(406)
+        .json({ message: "product must have aleast one image" });
+    }
+    if (updatedImages.length > 4) {
+      return res
+        .status(406)
+        .json({ message: "product can have maximum of 4 images" });
+    }
+
+    const categoryDetails = await Category.findById(category);
+    if (!categoryDetails) {
+      return res.status(409).json({ message: "category not found" });
+    }
+    const categoryOffer = categoryDetails.offer || 0;
+    const productOffer = offer || 0;
+    const applicableOffer = Math.max(
+      Number(productOffer),
+      Number(categoryOffer)
+    );
+    const salePrice = regularPrice - (regularPrice * applicableOffer) / 100;
+
+    const updatedProduct = await Product.findOneAndUpdate(
+      { _id: id },
+      {
+        productName,
+        category,
+        description,
+        quantity,
+        regularPrice,
+        salePrice,
+        productImage: updatedImages,
+        offer,
+      },
+      { new: true }
+    );
+
+    return res.json({
+      message: "product updated successfully",
+      data: updatedProduct,
+    });
+  } catch (error) {
+    console.error(error.message);
+    return res.status(500).json({message: error.message });
+  }
+};
+
+exports.unListProductController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const product = await Product.findByIdAndUpdate(
+      id,
+      { isActive: false },
+      { new: true }
+    );
+
+    if (!product) {
+      return res.status(404).json({ message: "product doesnt exists" });
+    }
+
+    return res.json({ message: "product unlisted successfully" });
   } catch (error) {
     console.error(error.message);
     return res.status(500).json({ errorMessage: error.message });
   }
 };
 
+exports.listProductController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const product = await Product.findByIdAndUpdate(
+      id,
+      { isActive: true },
+      { new: true }
+    );
 
-exports.unListProductController=async(req,res)=>{
-      try {
-        const{id}=req.params
-        const product=await Product.findByIdAndUpdate(
-            id,
-            {isActive:false},
-            {new:true}
-        )
-
-        if(!product){
-          return res.status(404).json({message:"product doesnt exists"})
-        }
-
-        return res.json({message:"product unlisted successfully"})
-    
-  } catch (error) {
-    console.error(error.message);
-    return res.status(500).json({ errorMessage: error.message });
-  }
-}
-
-exports.listProductController=async(req,res)=>{
-      try {
-        const{id}=req.params
-        const product=await Product.findByIdAndUpdate(
-            id,
-            {isActive:true},
-            {new:true}
-        )
-
-        if(!product){
-          return res.status(404).json({message:"product doesnt exists"})
-        }
-
-        return res.json({message:"product listed successfully"})
-    
-  } catch (error) {
-    console.error(error.message);
-    return res.status(500).json({ errorMessage: error.message });
-  }
-}
-
-exports.softDeleteProductController=async(req,res)=>{
-    try{
-        const {id}=req.params
-        const product=await Product.findByIdAndUpdate(id,{isDeleted:true,deletedAt:Date.now()},{new:true})
-              if(!product){
-          return res.status(404).json({message:"product doesnt exists"})
-        }
-        res.json({message:"product soft deleted successfully"})
+    if (!product) {
+      return res.status(404).json({ message: "product doesnt exists" });
     }
-catch (error) {
+
+    return res.json({ message: "product listed successfully" });
+  } catch (error) {
     console.error(error.message);
     return res.status(500).json({ errorMessage: error.message });
   }
-}
+};
+
+exports.softDeleteProductController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const product = await Product.findByIdAndUpdate(
+      id,
+      { isDeleted: true, deletedAt: Date.now() },
+      { new: true }
+    );
+    if (!product) {
+      return res.status(404).json({ message: "product doesnt exists" });
+    }
+    res.json({ message: "product soft deleted successfully" });
+  } catch (error) {
+    console.error(error.message);
+    return res.status(500).json({ errorMessage: error.message });
+  }
+};
