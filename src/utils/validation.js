@@ -105,8 +105,8 @@ function validateEditProductData(req) {
   }
 
   // 3️⃣ Quantity
-  if (quantity == null || quantity < 0) {
-    throw new Error("Quantity cannot be negative or empty.");
+  if (quantity == null || !Number.isInteger(Number(quantity)) || quantity < 0) {
+    throw new Error("Quantity must be a positive integer.");
   }
 
   // 4️⃣ Category

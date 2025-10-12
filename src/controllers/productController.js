@@ -120,7 +120,17 @@ exports.editProductController = async (req, res) => {
       return res.status(406).json({ message: "product not found" });
     }
 
-    const filePathstoRemove = removedImages.map((url) => {
+    const validRemovals=removedImages.filter(img=> product.productImage.includes(img))
+
+    const invalidRemovals=removedImages.filter(img=> !product.productImage.includes(img))
+
+    if(invalidRemovals.length > 0){
+       console.warn("Attempted to remove images not in product:", invalidRemovals)
+       res.status(409).json({message:"Attempted to remove images not in product"})
+    }
+
+    if(validRemovals.length > 0){
+        const filePathstoRemove = validRemovals.map((url) => {
       const filename = url.split("/").pop();
       return filename;
     });
@@ -139,6 +149,9 @@ exports.editProductController = async (req, res) => {
         console.error("Supabase delete error:", error);
       }
     }
+
+    }
+
 
     const files = req.files?.productImage || [];
 
