@@ -4,6 +4,7 @@ const adminRouter=express.Router()
 
 const categoryController=require("../controllers/categoryController")
 const productController=require("../controllers/productController")
+const customerController=require("../controllers/customerController")
 
 const {adminAuthMiddleware}=require("../middlewares/authMiddleware")
 const upload = require("../middlewares/multerMiddleware")
@@ -16,5 +17,7 @@ adminRouter.patch("/category/softDelete/:id",adminAuthMiddleware,categoryControl
 adminRouter.get("/category/getAllCategory",adminAuthMiddleware,categoryController.getAllCategoriesController)
 adminRouter.post("/product/addProduct",adminAuthMiddleware,upload.fields([{ name: "productImage", maxCount: 4 }]),productController.addProductController)
 adminRouter.put("/product/editProduct/:id",adminAuthMiddleware,upload.fields([{name:"productImage",maxCount:4}]),productController.editProductController)
+adminRouter.post("/admin/allCustomers",adminAuthMiddleware, customerController.getAllCustomersController)
+adminRouter.patch("/admin/user/:id",adminAuthMiddleware,customerController.updateUserStatusController)
 
 module.exports=adminRouter
