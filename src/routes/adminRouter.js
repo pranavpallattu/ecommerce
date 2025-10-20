@@ -21,6 +21,7 @@ adminRouter.put("/product/editProduct/:id",adminAuthMiddleware,upload.fields([{n
 adminRouter.post("/admin/allCustomers",adminAuthMiddleware, customerController.getAllCustomersController)
 adminRouter.patch("/admin/user/:id",adminAuthMiddleware,customerController.updateUserStatusController)
 adminRouter.post("/admin/add-coupon",adminAuthMiddleware,couponController.addCouponController)
-adminRouter.patch("/admin/coupon/:id/",adminAuthMiddleware,couponController.updateCouponStatusController)
+adminRouter.patch("/admin/coupon/:id",adminAuthMiddleware,couponController.updateCouponStatusController)
+adminRouter.patch("/admin/coupon/edit/:id",adminAuthMiddleware,couponController.editCouponController)
 
 module.exports=adminRouter

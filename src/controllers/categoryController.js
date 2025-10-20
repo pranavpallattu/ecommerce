@@ -140,7 +140,6 @@ exports.getAllCategoriesController=async(req,res)=>{
             data:Categories
         })
 
-      
 
     }
     catch (error) {

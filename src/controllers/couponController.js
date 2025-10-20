@@ -5,6 +5,50 @@ const {
   validateEditCouponData,
 } = require("../utils/validation");
 
+exports.getCouponController = async (req, res) => {
+  try {
+    const search = req.query.search?.trim() || "";
+    const page = parseInt(req.query.page) || 1;
+    let limit = parseInt(req.query.limit) || 5;
+    limit = limit > 5 ? 5 : limit;
+
+    const skip = (page - 1) * limit;
+
+    const searchQuery = {
+      deletedAt: null,
+      ...(search && {
+        $or: [
+          { code: { $regex: search, $options: "i" } },
+          { description: { $regex: search, $options: "i" } },
+        ],
+      }),
+    };
+
+    const [totalCoupons, coupons] = await Promise.all([
+      Coupon.countDocuments(searchQuery),
+      Coupon.find(searchQuery).sort({ createdAt: -1 }).skip(skip).limit(limit),
+    ]);
+
+    const totalPages = Math.ceil(totalCoupons / limit);
+
+    return res.status(200).json({
+      success: true,
+      message: "Coupons retrieved successfully",
+      data: coupons,
+      pagination: {
+        totalCoupons,
+        totalPages,
+        currentPage: page,
+        limit,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 exports.addCouponController = async (req, res) => {
   const {
     code,
