@@ -39,7 +39,7 @@ exports.updateUserStatusController = async (req, res) => {
     return res
       .status(201)
       .json({
-        message: `user is  ${user.isBlocked} ? unblocked :  blocked successfully`,
+        message: `user is  ${user.isBlocked ? "blocked" :  "unblocked"} successfully`,
         data: user,
       });
   } catch (error) {

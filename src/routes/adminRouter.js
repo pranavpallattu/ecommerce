@@ -5,6 +5,7 @@ const adminRouter=express.Router()
 const categoryController=require("../controllers/categoryController")
 const productController=require("../controllers/productController")
 const customerController=require("../controllers/customerController")
+const couponController=require("../controllers/couponController")
 
 const {adminAuthMiddleware}=require("../middlewares/authMiddleware")
 const upload = require("../middlewares/multerMiddleware")
@@ -19,5 +20,7 @@ adminRouter.post("/product/addProduct",adminAuthMiddleware,upload.fields([{ name
 adminRouter.put("/product/editProduct/:id",adminAuthMiddleware,upload.fields([{name:"productImage",maxCount:4}]),productController.editProductController)
 adminRouter.post("/admin/allCustomers",adminAuthMiddleware, customerController.getAllCustomersController)
 adminRouter.patch("/admin/user/:id",adminAuthMiddleware,customerController.updateUserStatusController)
+adminRouter.post("/admin/add-coupon",adminAuthMiddleware,couponController.addCouponController)
+adminRouter.patch("/admin/coupon/:id/",adminAuthMiddleware,couponController.updateCouponStatusController)
 
 module.exports=adminRouter

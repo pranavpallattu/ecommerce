@@ -49,32 +49,45 @@ function validateEditCategoryData(req) {
 }
 
 function validateProductData(req) {
-    let pattern = /^[a-z0-9\s\-()]+$/i;
-      const {productName,category,description,quantity,regularPrice,salePrice,offer}=req.body
-      const files=req?.files?.productImage
-  if(!productName || productName.length<3  ||  productName.length>50 || !pattern.test(productName)){
-    throw new Error("product name must have 3 to 50 characters")
+  let pattern = /^[a-z0-9\s\-()]+$/i;
+  const {
+    productName,
+    category,
+    description,
+    quantity,
+    regularPrice,
+    salePrice,
+    offer,
+  } = req.body;
+  const files = req?.files?.productImage;
+  if (
+    !productName ||
+    productName.length < 3 ||
+    productName.length > 50 ||
+    !pattern.test(productName)
+  ) {
+    throw new Error("product name must have 3 to 50 characters");
   }
-  if(!files || files.length<=0 || files.length>4){
-        throw new Error("there should be atleast one image and maximum of 4")
+  if (!files || files.length <= 0 || files.length > 4) {
+    throw new Error("there should be atleast one image and maximum of 4");
   }
-  if(!description || description.length<5 ||description.length>200){
-    throw new Error("description should be between 5 to 200 characters")
+  if (!description || description.length < 5 || description.length > 200) {
+    throw new Error("description should be between 5 to 200 characters");
   }
-  if(!category){
-    throw new Error("Category cannot be empty")
+  if (!category) {
+    throw new Error("Category cannot be empty");
   }
-  if(quantity==null || quantity<0){
-    throw new Error("Quantity cannot be negative")
+  if (quantity == null || quantity < 0) {
+    throw new Error("Quantity cannot be negative");
   }
-   if(regularPrice==null || regularPrice<0){
-    throw new Error("regular price cant be a negative number")
+  if (regularPrice == null || regularPrice < 0) {
+    throw new Error("regular price cant be a negative number");
   }
-   if (salePrice != null && salePrice < 0) {
+  if (salePrice != null && salePrice < 0) {
     throw new Error("Sale price cannot be negative.");
   }
-    if(offer !=null && (offer<0 || offer>100)){
-    throw new Error(" offer should be between 0 to 100")
+  if (offer != null && (offer < 0 || offer > 100)) {
+    throw new Error(" offer should be between 0 to 100");
   }
 }
 
@@ -95,8 +108,15 @@ function validateEditProductData(req) {
   const files = req.files?.productImage || [];
 
   // 1️⃣ Product name
-  if (!productName || productName.length < 3 || productName.length > 50 || !pattern.test(productName)) {
-    throw new Error("Product name must be 3–50 characters long and contain only letters, numbers, spaces, -, or ().");
+  if (
+    !productName ||
+    productName.length < 3 ||
+    productName.length > 50 ||
+    !pattern.test(productName)
+  ) {
+    throw new Error(
+      "Product name must be 3–50 characters long and contain only letters, numbers, spaces, -, or ()."
+    );
   }
 
   // 2️⃣ Description
@@ -142,6 +162,173 @@ function validateEditProductData(req) {
   // }
 }
 
+function validateCouponData(couponData) {
+  const {
+    code,
+    description,
+    expiryDate,
+    discount,
+    minPurchase, 
+    usageLimit, 
+    perUserLimit, 
+  } = couponData;
+
+  // Validate code
+  if (!code || typeof code !== "string" || code.trim().length === 0) {
+    throw new Error("Coupon code is required and it should be a string");
+  } else if (code.length < 3 || code.length > 40) {
+    throw new Error("Coupon code should be between 3 to 40 characters");
+  }
+
+  if (
+    !description ||
+    typeof description !== "string" ||
+    description.trim().length === 0
+  ) {
+    throw new Error("Description is required and it should be a string");
+  } else if (description.length < 5 || description.length > 200) {
+    throw new Error("Description should be between 5 to 200 characters");
+  }
+
+  if (!expiryDate) {
+    throw new Error("Expiry date is required");
+  } else {
+    const expiry = new Date(expiryDate); // Changed variable name to avoid shadowing
+    const currentDate = new Date();
+
+    if (isNaN(expiry.getTime())) {
+      throw new Error("Invalid date format");
+    } else if (expiry <= currentDate) {
+      throw new Error("Expiry date must be in the future");
+    }
+  }
+
+  if (discount === undefined || discount === null) {
+    throw new Error("Discount is required");
+  } else if (typeof discount !== "number" || isNaN(discount)) {
+    throw new Error("Discount must be a valid number");
+  } else if (discount <= 0 || discount > 100) {
+    throw new Error("Discount must be a number between 0 and 100");
+  }
+
+  if (minPurchase === undefined || minPurchase === null) {
+    throw new Error("Minimum purchase amount is required");
+  } else if (typeof minPurchase !== "number" || isNaN(minPurchase)) {
+    throw new Error("Minimum purchase amount must be a valid number");
+  } else if (minPurchase < 0) {
+    throw new Error("Minimum purchase amount must be a positive number");
+  }
+
+  if (usageLimit !== null && usageLimit !== undefined) {
+    if (typeof usageLimit !== "number" || isNaN(usageLimit)) {
+      throw new Error("Usage limit must be a valid number");
+    } else if (usageLimit < 1) {
+      throw new Error("Usage limit must be at least 1");
+    } else if (!Number.isInteger(usageLimit)) {
+      throw new Error("Usage limit must be a whole number");
+    }
+  }
+
+  if (perUserLimit !== null && perUserLimit !== undefined) {
+    if (typeof perUserLimit !== "number" || isNaN(perUserLimit)) {
+      throw new Error("Per user limit must be a valid number");
+    } else if (perUserLimit < 1) {
+      throw new Error("Per user limit must be at least 1");
+    } else if (!Number.isInteger(perUserLimit)) {
+      throw new Error("Per user limit must be a whole number");
+    }
+  }
+
+}
+
+function validateEditCouponData(editCouponData){
+   const {
+    code,
+    description,
+    expiryDate,
+    discount,
+    minPurchase, 
+    usageLimit, 
+    perUserLimit, 
+  } = editCouponData;
+
+
+  if(code !==undefined){
+    if (!code || typeof code !== "string" || code.trim().length === 0) {
+    throw new Error("Coupon code cannot be empty");
+  } else if (code.length < 3 || code.length > 40) {
+    throw new Error("Coupon code should be between 3 to 40 characters");
+  }
+  }
+
+  if(description !== undefined){
+     if (
+    !description ||
+    typeof description !== "string" ||
+    description.trim().length === 0
+  ) {
+    throw new Error("Description cannot be empty");
+  } else if (description.length < 5 || description.length > 200) {
+    throw new Error("Description should be between 5 to 200 characters");
+  }
+  }
+
+  if(expiryDate !== undefined){
+    
+  if (!expiryDate) {
+    throw new Error("Expiry date cannot be empty");
+  } else {
+    const expiry = new Date(expiryDate); // Changed variable name to avoid shadowing
+    const currentDate = new Date();
+
+    if (isNaN(expiry.getTime())) {
+      throw new Error("Invalid date format");
+    } else if (expiry <= currentDate) {
+      throw new Error("Expiry date must be in the future");
+    }
+  }
+  }
+
+  if(discount !== undefined){
+    if (  discount === null || typeof discount !== "number" || isNaN(discount)) {
+    throw new Error("Discount must be a valid number");
+  } else if (discount <= 0 || discount > 100) {
+    throw new Error("Discount must be a number between 0 and 100");
+  }
+  }
+
+   // Validate minPurchase (only if provided)
+  if (minPurchase !== undefined) {
+    if (minPurchase === null || typeof minPurchase !== "number" || isNaN(minPurchase)) {
+      throw new Error("Minimum purchase amount must be a valid number");
+    } else if (minPurchase < 0) {
+      throw new Error("Minimum purchase amount must be a positive number");
+    }
+  }
+
+  // Validate usageLimit (optional field, only if provided and not null)
+  if (usageLimit !== undefined && usageLimit !== null) {
+    if (typeof usageLimit !== "number" || isNaN(usageLimit)) {
+      throw new Error("Usage limit must be a valid number");
+    } else if (usageLimit < 1) {
+      throw new Error("Usage limit must be at least 1");
+    } else if (!Number.isInteger(usageLimit)) {
+      throw new Error("Usage limit must be a whole number");
+    }
+  }
+
+  // Validate perUserLimit (optional field, only if provided and not null)
+  if (perUserLimit !== undefined && perUserLimit !== null) {
+    if (typeof perUserLimit !== "number" || isNaN(perUserLimit)) {
+      throw new Error("Per user limit must be a valid number");
+    } else if (perUserLimit < 1) {
+      throw new Error("Per user limit must be at least 1");
+    } else if (!Number.isInteger(perUserLimit)) {
+      throw new Error("Per user limit must be a whole number");
+    }
+  }
+
+}
 
 
 module.exports = {
@@ -149,5 +336,7 @@ module.exports = {
   validateCategoryData,
   validateEditCategoryData,
   validateProductData,
-  validateEditProductData
+  validateEditProductData,
+  validateCouponData,
+  validateEditCouponData
 };
