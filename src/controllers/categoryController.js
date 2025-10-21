@@ -139,8 +139,6 @@ exports.getAllCategoriesController=async(req,res)=>{
         res.json({message:"all categories",
             data:Categories
         })
-
-
     }
     catch (error) {
     res.status(400).send(error);

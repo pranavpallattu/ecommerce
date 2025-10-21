@@ -23,4 +23,6 @@ authRouter.post("/auth/signup",authController.signUpController)
 
 authRouter.post("/auth/login",authController.loginController)
 
+authRouter.post("/logout",authController.logoutController)
+
 module.exports=authRouter

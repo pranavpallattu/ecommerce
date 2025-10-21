@@ -61,14 +61,13 @@ exports.signUpController = async (req, res) => {
     await Otp.deleteMany({ emailId });
 
     // generate token
-    const token = await jwt.sign({ _id: newUser._id }, "ecommerce@2025", {
+    const token = await jwt.sign({ _id: newUser._id,role:newUser.role }, "ecommerce@2025", {
       expiresIn: "1d",
     });
     console.log(token);
 
     res.cookie("token", token, {
       httpOnly: true,
-
       expires: new Date(Date.now() + 8 * 3600000),
     });
 
@@ -99,10 +98,20 @@ exports.loginController = async (req, res) => {
     if (!isPasswordValid) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
+
+    
+    // In loginController, after finding user:
+if (user.isBlocked) {
+  return res.status(403).json({ 
+    success: false, 
+    message: "Your account has been blocked" 
+  });
+}
+
     // set token
 
     // generate token
-    const token = await jwt.sign({ _id: user._id }, "ecommerce@2025", {
+    const token = await jwt.sign({ _id: user._id, role: user.role }, "ecommerce@2025", {
       expiresIn: "1d",
     });
     console.log(token);
@@ -121,3 +130,17 @@ exports.loginController = async (req, res) => {
     return res.status(400).send(error);
   }
 };
+
+
+exports.logoutController=async(req,res)=>{
+  try{
+    res.clearCookie("token")
+
+    res.status(201).json({success:true,message:"User logged out successfully"})
+
+
+  }
+  catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+}

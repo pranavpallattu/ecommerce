@@ -6,6 +6,7 @@ const cookieParser=require("cookie-parser")
 const passport=require("passport")
 const authRouter = require("./routes/authRouter");
 const adminRouter = require("./routes/adminRouter");
+const userRouter = require("./routes/userRouter");
 require("./config/passport")
 
 const app=express()
@@ -21,6 +22,7 @@ app.use(express.json())
 app.use(cookieParser())
 app.use(authRouter)
 app.use(adminRouter)
+app.use(userRouter)
 
 connectDB()
 .then(()=>{

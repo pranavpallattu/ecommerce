@@ -120,77 +120,82 @@ exports.editProductController = async (req, res) => {
       return res.status(406).json({ message: "product not found" });
     }
 
-    const validRemovals=removedImages.filter(img=> product.productImage.includes(img))
+    const validRemovals = removedImages.filter((img) =>
+      product.productImage.includes(img)
+    );
 
-    const invalidRemovals=removedImages.filter(img=> !product.productImage.includes(img))
+    const invalidRemovals = removedImages.filter(
+      (img) => !product.productImage.includes(img)
+    );
 
-    if(invalidRemovals.length > 0){
-       console.warn("Attempted to remove images not in product:", invalidRemovals)
-       res.status(409).json({message:"Attempted to remove images not in product"})
+    if (invalidRemovals.length > 0) {
+      console.warn(
+        "Attempted to remove images not in product:",
+        invalidRemovals
+      );
+      res
+        .status(409)
+        .json({ message: "Attempted to remove images not in product" });
     }
 
-    if(validRemovals.length > 0){
-        const filePathstoRemove = validRemovals.map((url) => {
-      const filename = url.split("/").pop();
-      return filename;
-    });
+    if (validRemovals.length > 0) {
+      const filePathstoRemove = validRemovals.map((url) => {
+        const filename = url.split("/").pop();
+        return filename;
+      });
 
-    console.log(filePathstoRemove);
+      console.log(filePathstoRemove);
 
-    if (filePathstoRemove.length > 0) {
-      try {
-        const { error } = await supabase.storage
-          .from(bucketName)
-          .remove(filePathstoRemove);
-        if (error) {
-          console.error("Failed to delete images:", error);
+      if (filePathstoRemove.length > 0) {
+        try {
+          const { error } = await supabase.storage
+            .from(bucketName)
+            .remove(filePathstoRemove);
+          if (error) {
+            console.error("Failed to delete images:", error);
+          }
+        } catch (error) {
+          console.error("Supabase delete error:", error);
         }
-      } catch (error) {
-        console.error("Supabase delete error:", error);
       }
     }
-
-    }
-
 
     const files = req.files?.productImage || [];
 
     let imageUrls = [];
 
-   try{
-     for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const processedImg = await sharp(file.buffer)
-        .resize(800, 800)
-        .webp({ quality: 80 })
-        .toBuffer();
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const processedImg = await sharp(file.buffer)
+          .resize(800, 800)
+          .webp({ quality: 80 })
+          .toBuffer();
 
-      const fileName = generateFileName(productName, i);
-      console.log(fileName);
+        const fileName = generateFileName(productName, i);
+        console.log(fileName);
 
-      const { error } = await supabase.storage
-        .from(bucketName)
-        .upload(fileName, processedImg, { contentType: "image/webp" });
-
-      if (error) {
-        console.error("supabase upload error" + error.message);
-
-        return res.status(409).json({ message: "image upload failed" });
-      }
-
-      const { data } = supabase.storage.from(bucketName).getPublicUrl(fileName);
-      imageUrls.push(data.publicUrl);
-      console.log(data);
-    }
-  }
-    catch(error){
-      if(imageUrls.length>0){
-        await supabase.storage
+        const { error } = await supabase.storage
           .from(bucketName)
-          .remove(filePathstoRemove);
+          .upload(fileName, processedImg, { contentType: "image/webp" });
+
+        if (error) {
+          console.error("supabase upload error" + error.message);
+
+          return res.status(409).json({ message: "image upload failed" });
+        }
+
+        const { data } = supabase.storage
+          .from(bucketName)
+          .getPublicUrl(fileName);
+        imageUrls.push(data.publicUrl);
+        console.log(data);
       }
-    
-   }
+    } catch (error) {
+      if (imageUrls.length > 0) {
+        await supabase.storage.from(bucketName).remove(filePathstoRemove);
+      }
+    }
 
     const updatedImages = [
       ...existingImages.filter((img) => !removedImages.includes(img)),
@@ -241,7 +246,7 @@ exports.editProductController = async (req, res) => {
     });
   } catch (error) {
     console.error(error.message);
-    return res.status(500).json({message: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
@@ -300,5 +305,54 @@ exports.softDeleteProductController = async (req, res) => {
   } catch (error) {
     console.error(error.message);
     return res.status(500).json({ errorMessage: error.message });
+  }
+};
+
+exports.getProductController = async (req, res) => {
+  try {
+    const search = req.query.search?.trim() || "";
+    const page = parseInt(req.query.page) || 1;
+    let limit = parseInt(req.query.limit) || 5;
+    limit = limit > 5 ? 5 : limit;
+
+    const skip = (page - 1) * limit;
+
+    const searchQuery = {
+      deletedAt: null,
+      ...(search && {
+        $or: [
+          { productName: { $regex: search, $options: "i" } },
+          { description: { $regex: search, $options: "i" } },
+        ],
+      }),
+    };
+    const [totalProducts, products] = await Promise.all([
+      Product.countDocuments(searchQuery),
+      Product.find(searchQuery)
+        .populate("category")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+    ]);
+
+    const totalPages = Math.ceil(totalProducts / limit);
+
+    return res.status(200).json({
+      success: true,
+      message: "Products retrieved successfully",
+      data: products,
+      pagination: {
+        totalProducts,
+        totalPages,
+        currentPage: page,
+        limit,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+    });
+  } catch (error) {
+    return res
+      .status(500)
+      .json({ success: false, message: error.message });
   }
 };
