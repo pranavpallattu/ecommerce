@@ -46,19 +46,16 @@ exports.getShopProductsController = async (req, res) => {
     const skip = (page - 1) * limit;
     const category= req.query.category || "all"
     const sortOption= req.query.sort || "default"
-    const search= req.query.search || ""
 
     const categoryFilter = category !== "all"
       ? { category: category }
       : {};
 
-    const searchFilter = search ? {productName :{ $regex : search, $options : "i"}} : {};
 
     const filters={
       isActive:true,
       deletedAt:null,
       ...categoryFilter,
-      ...searchFilter
     }
 
     let sortQuery = {};
@@ -127,3 +124,49 @@ exports.getProductDetailsController=async(req,res)=>{
 }
 
 
+exports.searchProductsController=async(req,res)=>{
+
+  try{
+
+     const { search } = req.query;
+
+    if (!search || search.trim() === "") {
+      return res.status(200).json({
+        success: false,
+        message: "No search query provided",
+        products: [],
+        count: 0,
+      });
+    }
+
+    const searchQuery = search.trim();
+
+    const activeCategories=await Category.find({
+      isActive:true,
+      deletedAt:null
+    })
+
+    const activeCategoryIds=activeCategories.map(category=> category._id)
+
+    const products=await Product.find({
+      $or : [
+        {productName : {$regex : searchQuery, $options : "i"}},
+        {description : {$regex : searchQuery, $options : "i"}},
+      ],
+        isActive:true,
+        deletedAt:null,
+        category : {$in : activeCategoryIds}
+    }).populate("category", "name offer").sort({createdAt : -1}).limit(20)
+
+    res.status(200).json({success:true,message: products.length > 0 
+        ? `Found ${products.length} product${products.length > 1 ? 's' : ''}` 
+        : 'No products found',data:{
+          products,
+          count:products.length,
+          searchQuery
+        }})
+  }
+   catch (error) {
+   return res.status(500).json({ success: false, message: error.message });
+  }
+}
