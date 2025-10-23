@@ -5,18 +5,18 @@ const addressSchema = new mongoose.Schema(
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true
+      required: true,
     },
     name: {
       type: String,
       required: true,
       trim: true,
-      lowercase: true
+      lowercase: true,
     },
     addressType: {
       type: String,
       enum: ["home", "work", "other"],
-      default: "home"
+      default: "home",
     },
     phone: {
       type: String,
@@ -25,19 +25,19 @@ const addressSchema = new mongoose.Schema(
     streetAddress: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
     city: {
       type: String,
       required: true,
       trim: true,
-      lowercase: true
+      lowercase: true,
     },
     state: {
       type: String,
       required: true,
       trim: true,
-      lowercase: true
+      lowercase: true,
     },
     postalCode: {
       type: String,
@@ -50,15 +50,19 @@ const addressSchema = new mongoose.Schema(
       required: true,
       default: "India",
       trim: true,
-      lowercase: true
+      lowercase: true,
     },
     landmark: {
       type: String,
-      trim: true
+      trim: true,
     },
     isDefault: {
       type: Boolean,
-      default: false
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null
     },
   },
   { timestamps: true }

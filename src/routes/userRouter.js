@@ -15,6 +15,8 @@ userRouter.post("/wishlist/:productId",userAuthMiddleware,wishlistController.add
 userRouter.delete("/wishlist/:productId",userAuthMiddleware,wishlistController.removeFromWishlist)
 userRouter.post("/addresses",userAuthMiddleware,addressController.addAddressController)
 userRouter.get("/addresses",userAuthMiddleware,addressController.getAddressController)
+userRouter.delete("/addresses/:id",userAuthMiddleware,addressController.softDeleteAddressController)
+userRouter.patch("/addresses/:id",userAuthMiddleware,addressController.editAddressController)
 
 
 module.exports=userRouter
