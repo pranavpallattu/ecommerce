@@ -1,3 +1,4 @@
+const { default: mongoose } = require("mongoose");
 const validator = require("validator");
 function validateSignUpData(req) {
   const { emailId, password, name } = req.body;
@@ -330,6 +331,123 @@ function validateEditCouponData(editCouponData){
 
 }
 
+function ValidateAddressData(addressData){
+
+  const {name, addressType, phone, streetAddress, city, state, postalCode, country, landmark}=addressData
+
+  // Validate name
+  if (!name) {
+    throw new Error("Name is required");
+  } else if (typeof name !== "string") {
+    throw new Error("Name must be a string");
+  } else if (name.trim().length < 2) {
+    throw new Error("Name must be at least 2 characters long");
+  } else if (name.trim().length > 50) {
+   throw new Error("Name must not exceed 50 characters");
+  } else if (!/^[a-zA-Z\s]+$/.test(name.trim())) {
+   throw new Error ("Name must contain only letters and spaces");
+  }
+
+  // Validate addressType
+  if (addressType) {
+    const validTypes = ["home", "work", "other"];
+    if (!validTypes.includes(addressType.toLowerCase())) {
+       throw new Error("Address type must be 'home', 'work', or 'other'");
+    }
+  }
+
+  // Validate phone
+  if (!phone) {
+     throw new Error("Phone number is required");
+  } else if (typeof phone !== "string") {
+     throw new Error("Phone number must be a string");
+  } else {
+    // Remove spaces and special characters for validation
+    const cleanPhone = phone.replace(/[\s\-\(\)]/g, "");
+    
+    // Indian phone number validation (10 digits, starting with 6-9)
+    if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+       throw new Error("Phone number must be a valid 10-digit Indian mobile number");
+    }
+  }
+
+  // Validate streetAddress
+  if (!streetAddress) {
+     throw new Error("Street address is required");
+  } else if (typeof streetAddress !== "string") {
+     throw new Error("Street address must be a string");
+  } else if (streetAddress.trim().length < 5) {
+     throw new Error("Street address must be at least 5 characters long");
+  } else if (streetAddress.trim().length > 200) {
+     throw new Error("Street address must not exceed 200 characters");
+  }
+
+  // Validate city
+  if (!city) {
+     throw new Error("City is required");
+  } else if (typeof city !== "string") {
+     throw new Error("City must be a string");
+  } else if (city.trim().length < 2) {
+     throw new Error("City must be at least 2 characters long");
+  } else if (city.trim().length > 50) {
+     throw new Error("City must not exceed 50 characters");
+  } else if (!/^[a-zA-Z\s]+$/.test(city.trim())) {
+     throw new Error("City must contain only letters and spaces");
+  }
+
+  // Validate state
+  if (!state) {
+     throw new Error("State is required");
+  } else if (typeof state !== "string") {
+     throw new Error("State must be a string");
+  } else if (state.trim().length < 2) {
+     throw new Error("State must be at least 2 characters long");
+  } else if (state.trim().length > 50) {
+     throw new Error("State must not exceed 50 characters");
+  } else if (!/^[a-zA-Z\s]+$/.test(state.trim())) {
+     throw new Error("State must contain only letters and spaces");
+  }
+
+  // Validate postalCode (Indian PIN code)
+  if (!postalCode) {
+     throw new Error("Postal code is required");
+  } else if (typeof postalCode !== "string") {
+     throw new Error("Postal code must be a string");
+  } else if (!/^[1-9][0-9]{5}$/.test(postalCode.trim())) {
+     throw new Error("Postal code must be a valid 6-digit Indian PIN code");
+  }
+
+  // Validate country
+  if (!country) {
+    throw new Error("Country is required")
+   } else if(typeof country !== "string") {
+       throw new Error("Country must be a string");
+    } else if (country.trim().length < 2) {
+       throw new Error("Country must be at least 2 characters long");
+    } else if (country.trim().length > 50) {
+       throw new Error("Country must not exceed 50 characters");
+    }
+  
+
+  // Validate landmark (optional)
+  if (landmark) {
+    if (typeof landmark !== "string") {
+       throw new Error("Landmark must be a string");
+    } else if (landmark.trim().length > 100) {
+       throw new Error("Landmark must not exceed 100 characters");
+    }
+  }
+
+  // // Validate isDefault (optional)
+  // if (isDefault !== undefined) {
+  //   if (typeof isDefault !== "boolean") {
+  //      throw new Error("isDefault must be a boolean value");
+  //   }
+  // }
+};
+
+
+
 
 module.exports = {
   validateSignUpData,
@@ -338,5 +456,6 @@ module.exports = {
   validateProductData,
   validateEditProductData,
   validateCouponData,
-  validateEditCouponData
+  validateEditCouponData,
+  ValidateAddressData
 };
