@@ -54,13 +54,47 @@ exports.addToWishlistController = async (req, res) => {
 
     wishlist.products.push({ product: productId });
     await wishlist.save();
-    return res
-      .status(200)
-      .json({
-        success: true,
-        message: "Product added to wishlist",
-        data: wishlist,
-      });
+    return res.status(200).json({
+      success: true,
+      message: "Product added to wishlist",
+      data: wishlist,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.removeFromWishlist = async (req, res) => {
+  try {
+    const user = req.user;
+    const { productId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid product ID" });
+    }
+
+
+    const wishlist = await Wishlist.findOne({userId:user._id})
+    if(!wishlist){
+        return res.status(404).json({success:false,message:"Wishlist doesn not exist"})
+    }
+
+    
+    const productExistsInWishlist= wishlist.products.some((item)=> item.product.toString() === productId)
+    if(!productExistsInWishlist){
+      return res.status(404).json({success:false,message:"Product does not exist in wishlist"})
+    }
+
+    wishlist.products=wishlist.products.filter((item)=> item.product.toString() !== productId )
+    // learn about why converting to toString()
+
+    await wishlist.save()
+
+    return res.status(200).json({success:true,message:"product removed from wishlist",data:wishlist})
+
+
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }

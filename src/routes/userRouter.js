@@ -11,4 +11,7 @@ userRouter.get("/shop",productController.getShopProductsController)
 userRouter.get("/productDetails/:id",productController.getProductDetailsController)
 userRouter.get("/search",productController.searchProductsController)
 userRouter.post("/wishlist/:productId",userAuthMiddleware,wishlistController.addToWishlistController)
+userRouter.delete("/wishlist/:productId",userAuthMiddleware,wishlistController.removeFromWishlist)
+
+
 module.exports=userRouter
