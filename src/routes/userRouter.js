@@ -5,6 +5,7 @@ const userRouter=express.Router()
 const productController=require("../controllers/user/productController")
 const wishlistController=require("../controllers/user/wishlistController")
 const addressController=require("../controllers/user/addressController")
+const cartController=require("../controllers/user/cartController")
 const {userAuthMiddleware}=require("../middlewares/authMiddleware")
 
 userRouter.get("/home",productController.getHomeProductsController)
@@ -17,6 +18,7 @@ userRouter.post("/addresses",userAuthMiddleware,addressController.addAddressCont
 userRouter.get("/addresses",userAuthMiddleware,addressController.getAddressController)
 userRouter.delete("/addresses/:id",userAuthMiddleware,addressController.softDeleteAddressController)
 userRouter.patch("/addresses/:id",userAuthMiddleware,addressController.editAddressController)
+userRouter.post("/cart/:productId",userAuthMiddleware,cartController.addToCart)
 
 
 module.exports=userRouter
