@@ -21,6 +21,7 @@ userRouter.patch("/addresses/:id",userAuthMiddleware,addressController.editAddre
 userRouter.post("/cart/:productId",userAuthMiddleware,cartController.addToCart)
 userRouter.get("/cart",userAuthMiddleware,cartController.getCart)
 userRouter.delete("/cart/:productId",userAuthMiddleware,cartController.removeFromCart)
+userRouter.patch("/cart/updatequantity",userAuthMiddleware,cartController.updateQuantity)
 
 
 module.exports=userRouter

@@ -29,7 +29,8 @@ async function revalidateCoupon(cart) {
   );
 
   cart.discount = discountAmount;
-cart.finalTotal = Math.max(cart.subTotal - (cart.discount || 0), 0);  return cart;
+  cart.finalTotal = Math.max(cart.subTotal - (cart.discount || 0), 0);
+  return cart;
 }
 
 module.exports = revalidateCoupon;

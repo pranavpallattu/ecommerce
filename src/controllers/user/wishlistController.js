@@ -1,6 +1,7 @@
 const { default: mongoose } = require("mongoose");
 const Product = require("../../models/productSchema");
 const Wishlist = require("../../models/wishlistSchema");
+const Cart = require("../../models/cartSchema");
 
 exports.addToWishlistController = async (req, res) => {
   try {
@@ -75,26 +76,40 @@ exports.removeFromWishlist = async (req, res) => {
         .json({ success: false, message: "Invalid product ID" });
     }
 
-
-    const wishlist = await Wishlist.findOne({userId:user._id})
-    if(!wishlist){
-        return res.status(404).json({success:false,message:"Wishlist doesn not exist"})
+    const wishlist = await Wishlist.findOne({ userId: user._id });
+    if (!wishlist) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Wishlist doesn not exist" });
     }
 
-    
-    const productExistsInWishlist= wishlist.products.some((item)=> item.product.toString() === productId)
-    if(!productExistsInWishlist){
-      return res.status(404).json({success:false,message:"Product does not exist in wishlist"})
+    const productExistsInWishlist = wishlist.products.some(
+      (item) => item.product.toString() === productId
+    );
+    if (!productExistsInWishlist) {
+      return res
+        .status(404)
+        .json({
+          success: false,
+          message: "Product does not exist in wishlist",
+        });
     }
 
-    wishlist.products=wishlist.products.filter((item)=> item.product.toString() !== productId )
+    wishlist.products = wishlist.products.filter(
+      (item) => item.product.toString() !== productId
+    );
 
-    await wishlist.save()
+    await wishlist.save();
 
-    return res.status(200).json({success:true,message:"product removed from wishlist",data:wishlist})
-
-
+    return res
+      .status(200)
+      .json({
+        success: true,
+        message: "product removed from wishlist",
+        data: wishlist,
+      });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+

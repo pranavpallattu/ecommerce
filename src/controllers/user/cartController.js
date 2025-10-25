@@ -170,3 +170,80 @@ exports.removeFromCart = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+exports.updateQuantity = async (req, res) => {
+  try {
+    const user = req.user;
+    const { productId, quantity } = req.body;
+    const parsedQuantity = Number(quantity);
+
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid product ID" });
+    }
+
+    if (
+      !quantity  ||
+      isNaN(parsedQuantity) ||
+      !Number.isInteger(parsedQuantity) ||
+      parsedQuantity < 1
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Quantity must be a positive integer",
+      });
+    }
+
+    let cart = await Cart.findOne({ userId: user._id });
+    if (!cart) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Cart not found" });
+    }
+
+    const cartItem = cart.items.find(
+      (item) => item.product.toString() === productId
+    );
+    if (!cartItem) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found in cart" });
+    }
+    const product = await Product.findOne({
+      _id: productId,
+      deletedAt: null,
+      isActive: true,
+    });
+    if (!product) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Product not found or unavailable" });
+    }
+
+    if (parsedQuantity > product.quantity) {
+      return res.status(400).json({
+        success: false,
+        message: `Only ${product.quantity} items available in stock`,
+      });
+    }
+
+    cartItem.quantity = parsedQuantity;
+    // if price changed for clarity
+    cartItem.price = product.salePrice;
+
+    cart.subTotal = calculateSubTotal(cart.items);
+    cart = await revalidateCoupon(cart);
+
+    await cart.save();
+    await cart.populate("items.product");
+
+    return res.status(200).json({
+      success: true,
+      message: "Cart item quantity updated successfully",
+      data: cart,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
