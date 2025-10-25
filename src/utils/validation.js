@@ -168,6 +168,7 @@ function validateCouponData(couponData) {
     code,
     description,
     expiryDate,
+    discountType,
     discount,
     minPurchase,
     usageLimit,
@@ -191,6 +192,10 @@ function validateCouponData(couponData) {
     throw new Error("Description should be between 5 to 200 characters");
   }
 
+  if (!discountType || !["percentage", "flat"].includes(discountType)) {
+    throw new Error("Discount type must be either 'percentage' or 'flat'");
+  }
+
   if (!expiryDate) {
     throw new Error("Expiry date is required");
   } else {
@@ -208,8 +213,13 @@ function validateCouponData(couponData) {
     throw new Error("Discount is required");
   } else if (typeof discount !== "number" || isNaN(discount)) {
     throw new Error("Discount must be a valid number");
-  } else if (discount <= 0 || discount > 100) {
+  } else if (
+    discountType === "percentage" &&
+    (discount <= 0 || discount > 100)
+  ) {
     throw new Error("Discount must be a number between 0 and 100");
+  } else if (discountType === "flat" && discount <= 0) {
+    throw new Error("Discount must be a valid positive number");
   }
 
   if (minPurchase === undefined || minPurchase === null) {
@@ -241,7 +251,7 @@ function validateCouponData(couponData) {
   }
 }
 
-function validateEditCouponData(editCouponData) {
+function validateEditCouponData(editCouponData,existingCoupon) {
   const {
     code,
     description,
@@ -251,6 +261,7 @@ function validateEditCouponData(editCouponData) {
     usageLimit,
     perUserLimit,
   } = editCouponData;
+
 
   if (code !== undefined) {
     if (!code || typeof code !== "string" || code.trim().length === 0) {
@@ -272,6 +283,7 @@ function validateEditCouponData(editCouponData) {
     }
   }
 
+
   if (expiryDate !== undefined) {
     if (!expiryDate) {
       throw new Error("Expiry date cannot be empty");
@@ -290,8 +302,19 @@ function validateEditCouponData(editCouponData) {
   if (discount !== undefined) {
     if (discount === null || typeof discount !== "number" || isNaN(discount)) {
       throw new Error("Discount must be a valid number");
-    } else if (discount <= 0 || discount > 100) {
-      throw new Error("Discount must be a number between 0 and 100");
+    }
+     
+    if(!existingCoupon || !existingCoupon.discountType){
+      throw new Error("Cannot validate discount without existing coupon data");
+    }
+    const typeToValidate=existingCoupon.discountType
+      if (
+      typeToValidate === "percentage" &&
+      (discount <= 0 || discount > 100)
+    ) {
+      throw new Error("Discount percentage must be a number between 0 and 100");
+    } else if (typeToValidate === "flat" && discount <= 0) {
+      throw new Error("Discount amount must be a valid positive number");
     }
   }
 
@@ -622,7 +645,6 @@ function validateEditAddressData(editAddressData) {
     }
   }
 }
-
 
 module.exports = {
   validateSignUpData,

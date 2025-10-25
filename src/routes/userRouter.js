@@ -19,6 +19,8 @@ userRouter.get("/addresses",userAuthMiddleware,addressController.getAddressContr
 userRouter.delete("/addresses/:id",userAuthMiddleware,addressController.softDeleteAddressController)
 userRouter.patch("/addresses/:id",userAuthMiddleware,addressController.editAddressController)
 userRouter.post("/cart/:productId",userAuthMiddleware,cartController.addToCart)
+userRouter.get("/cart",userAuthMiddleware,cartController.getCart)
+userRouter.delete("/cart/:productId",userAuthMiddleware,cartController.removeFromCart)
 
 
 module.exports=userRouter

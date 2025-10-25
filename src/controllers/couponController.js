@@ -54,6 +54,7 @@ exports.addCouponController = async (req, res) => {
     code,
     description,
     discount,
+    discountType,
     minPurchase,
     expiryDate,
     usageLimit,
@@ -77,6 +78,7 @@ exports.addCouponController = async (req, res) => {
     const couponData = {
       code: upperCasedCouponCode,
       description,
+      discountType,
       expiryDate,
       discount: parsedDiscount,
       minPurchase: parsedMinPurchase,
@@ -130,8 +132,17 @@ exports.editCouponController = async (req, res) => {
         .json({ success: false, message: "No Fields provided for update" });
     }
 
+    if (
+      updateData.discountType  !== undefined) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Cannot change discount type once coupon is created. Please create a new coupon instead.",
+      });
+    }
+
     try {
-      validateEditCouponData(updateData);
+      validateEditCouponData(updateData,existingCoupon);
     } catch (validationError) {
       return res
         .status(400)

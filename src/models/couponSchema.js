@@ -14,11 +14,26 @@ const couponSchema = new mongoose.Schema(
       trim: true,
       required: true,
     },
+    discountType: {
+      type: String,
+      enum: ["percentage", "flat"],
+      default: "percentage",
+    },
+
     discount: {
       type: Number,
       required: true,
       min: 0,
-      max: 100,
+      validate: {
+        validator: function (value) {
+          if (this.discountType === "percentage") {
+            return value <= 100;
+          }
+          return value <= 50000;
+        },
+        message:
+          "Invalid discount value. For percentage type, it must be <= 100. For flat type, it must be a valid number.",
+      },
     },
     minPurchase: {
       type: Number,
@@ -42,8 +57,8 @@ const couponSchema = new mongoose.Schema(
       default: true,
     },
     isDeleted: {
-      type:Boolean,
-      default:false
+      type: Boolean,
+      default: false,
     },
     deletedAt: {
       type: Date,
