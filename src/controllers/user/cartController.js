@@ -29,13 +29,11 @@ exports.addToCart = async (req, res) => {
     if (product.quantity < 1) {
       return res.status(400).json({
         success: false,
-        message: "Product is out of stocks",
+        message: "Product is out of stock",
       });
     }
 
     let cart = await Cart.findOne({ userId: user._id });
-    console.log(product);
-    console.log(product?.salePrice);
 
     if (!cart) {
       cart = new Cart({
@@ -47,8 +45,9 @@ exports.addToCart = async (req, res) => {
       });
 
       await cart.save();
+      await cart.populate("items.product");
 
-      return res.status(200).json({
+      return res.status(201).json({
         success: true,
         message: "Product added to cart successfully",
         data: cart,
@@ -72,7 +71,7 @@ exports.addToCart = async (req, res) => {
     });
 
     cart.totalItems = cart.items.length;
-    cart.subTotal = calculateSubTotal(cart.items)
+    cart.subTotal = calculateSubTotal(cart.items);
 
     cart = await revalidateCoupon(cart);
 
@@ -98,7 +97,7 @@ exports.getCart = async (req, res) => {
       .populate("appliedCoupon");
     if (!cart) {
       return res.status(200).json({
-        success:true,
+        success: true,
         message: "Cart is empty",
         data: {
           items: [],
@@ -113,10 +112,9 @@ exports.getCart = async (req, res) => {
     // Revalidate coupon for response only (without saving) - to not validate rest principle by saving data in a get call we are not modifying db
     const tempCart = await revalidateCoupon(cart);
 
-
     return res.status(200).json({
       success: true,
-      message: "Cart data is retieved successfully",
+      message: "Cart data is retrieved successfully",
       data: tempCart,
     });
   } catch (error) {
@@ -139,23 +137,16 @@ exports.removeFromCart = async (req, res) => {
     if (!cart) {
       return res.status(404).json({
         success: false,
-        message: "Cart is empty",
-        data: {
-          items: [],
-          totalItems: 0,
-          subTotal: 0,
-          discount: 0,
-          finalTotal: 0,
-        },
+        message: "Cart not found",
       });
     }
-    const product = cart.items.some(
+    const productExists = cart.items.some(
       (item) => item.product.toString() === productId
     );
-    if (!product) {
+    if (!productExists) {
       return res
         .status(404)
-        .json({ success: false, message: "Product does not found or exist" });
+        .json({ success: false, message: "Product not found in cart" });
     }
 
     cart.items = cart.items.filter(
@@ -163,16 +154,16 @@ exports.removeFromCart = async (req, res) => {
     );
 
     // 🔹 Recalculate subtotal here
-    cart.subTotal = calculateSubTotal(cart.items)
-    cart = await revalidateCoupon(cart);
     cart.totalItems = cart.items.length;
+    cart.subTotal = calculateSubTotal(cart.items);
+    cart = await revalidateCoupon(cart);
 
     await cart.save();
     await cart.populate("items.product");
 
     return res.status(200).json({
       success: true,
-      message: "Product is removed from cart successfully",
+      message: "Product removed from cart successfully",
       data: cart,
     });
   } catch (error) {

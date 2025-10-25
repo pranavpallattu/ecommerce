@@ -88,7 +88,6 @@ exports.removeFromWishlist = async (req, res) => {
     }
 
     wishlist.products=wishlist.products.filter((item)=> item.product.toString() !== productId )
-    // learn about why converting to toString()
 
     await wishlist.save()
 
