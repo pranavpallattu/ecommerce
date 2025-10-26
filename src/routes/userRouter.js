@@ -6,6 +6,7 @@ const productController=require("../controllers/user/productController")
 const wishlistController=require("../controllers/user/wishlistController")
 const addressController=require("../controllers/user/addressController")
 const cartController=require("../controllers/user/cartController")
+const couponController=require("../controllers/user/couponController")
 const {userAuthMiddleware}=require("../middlewares/authMiddleware")
 
 userRouter.get("/home",productController.getHomeProductsController)
