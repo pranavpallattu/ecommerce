@@ -21,13 +21,14 @@ userRouter.delete("/addresses/:id",userAuthMiddleware,addressController.softDele
 
 userRouter.post("/cart/applyCoupon",userAuthMiddleware,couponController.applyCoupon)
 userRouter.delete("/cart/removeCoupon",userAuthMiddleware,couponController.removeCoupon)
+userRouter.get("/cart/coupons",userAuthMiddleware,couponController.getCoupons)
 
 
 userRouter.patch("/addresses/:id",userAuthMiddleware,addressController.editAddressController)
+userRouter.patch("/cart/updatequantity",userAuthMiddleware,cartController.updateQuantity)
 userRouter.post("/cart/:productId",userAuthMiddleware,cartController.addToCart)
 userRouter.get("/cart",userAuthMiddleware,cartController.getCart)
 userRouter.delete("/cart/:productId",userAuthMiddleware,cartController.removeFromCart)
-userRouter.patch("/cart/updatequantity",userAuthMiddleware,cartController.updateQuantity)
 
 
 

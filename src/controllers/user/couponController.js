@@ -228,3 +228,33 @@ exports.removeCoupon = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+exports.getCoupons = async (req, res) => {
+  try {
+    const today = new Date();
+
+    const coupons = await Coupon.find({
+      isActive: true,
+      deletedAt: null,
+      expiryDate: { $gt: today },
+      $or: [
+        { usageLimit: null }, // Unlimited coupons
+        { $expr: { $lt: ["$usedCount", "$usageLimit"] } }, // Limited coupons with uses left
+      ],
+    })
+      .select("code description discountType discount minPurchase expiryDate")
+      .sort({ expiryDate: 1 });
+    if (coupons.length === 0) {
+      return res
+        .status(200)
+        .json({ success: true, message: "No coupons available", data: [] });
+    }
+    return res.status(200).json({
+      success: true,
+      message: "Coupons retrieved successfully",
+      data: coupons,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
