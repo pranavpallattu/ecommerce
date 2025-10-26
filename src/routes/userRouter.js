@@ -18,11 +18,17 @@ userRouter.delete("/wishlist/:productId",userAuthMiddleware,wishlistController.r
 userRouter.post("/addresses",userAuthMiddleware,addressController.addAddressController)
 userRouter.get("/addresses",userAuthMiddleware,addressController.getAddressController)
 userRouter.delete("/addresses/:id",userAuthMiddleware,addressController.softDeleteAddressController)
+
+userRouter.post("/cart/applyCoupon",userAuthMiddleware,couponController.applyCoupon)
+userRouter.delete("/cart/removeCoupon",userAuthMiddleware,couponController.removeCoupon)
+
+
 userRouter.patch("/addresses/:id",userAuthMiddleware,addressController.editAddressController)
 userRouter.post("/cart/:productId",userAuthMiddleware,cartController.addToCart)
 userRouter.get("/cart",userAuthMiddleware,cartController.getCart)
 userRouter.delete("/cart/:productId",userAuthMiddleware,cartController.removeFromCart)
 userRouter.patch("/cart/updatequantity",userAuthMiddleware,cartController.updateQuantity)
+
 
 
 module.exports=userRouter

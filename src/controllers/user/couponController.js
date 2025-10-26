@@ -144,3 +144,87 @@ exports.applyCoupon = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+exports.removeCoupon = async (req, res) => {
+  try {
+    const user = req.user;
+    const cart = await Cart.findOne({ userId: user._id });
+    if (!cart) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Cart not found" });
+    }
+
+    if (!cart.appliedCoupon) {
+      return res.status(400).json({
+        success: false,
+        message: "No coupon applied to remove",
+      });
+    }
+
+    const appliedCouponId = cart.appliedCoupon;
+
+    // Find the coupon to decrement usage
+    const coupon = await Coupon.findById(appliedCouponId);
+    if (!coupon) {
+      // Coupon was deleted, just remove from cart
+      cart.appliedCoupon = null;
+      cart.discount = 0;
+      cart.finalTotal = cart.subTotal;
+      await cart.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Coupon removed successfully",
+        data: cart,
+      });
+    }
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // update cart
+      const appliedCouponId = cart.appliedCoupon;
+      cart.appliedCoupon = null;
+      cart.discount = 0;
+      cart.finalTotal = cart.subTotal;
+
+      await cart.save({ session });
+
+      // update coupon usage count (-1) and prevent negative
+
+      coupon.usedCount = Math.max(0, coupon.usedCount - 1);
+      await coupon.save({ session });
+
+      // update user used coupons
+      if (user.usedCoupons && user.usedCoupons.length > 0) {
+        const index = user.usedCoupons.findIndex(
+          (couponId) => couponId.toString() !== appliedCouponId.toString()
+        );
+        //  find index returns -1 if not match is found , if it is -1 it removes the last element of array splice(-1,1)
+        if (index !== -1) {
+          user.usedCoupons.splice(index, 1);
+        }
+        await user.save({ session });
+      }
+
+      // commit transaction
+
+      await session.commitTransaction();
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Coupon removed successfully",
+      data: cart,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
