@@ -7,6 +7,7 @@ const wishlistController=require("../controllers/user/wishlistController")
 const addressController=require("../controllers/user/addressController")
 const cartController=require("../controllers/user/cartController")
 const couponController=require("../controllers/user/couponController")
+const paymentController=require("../controllers/user/paymentController")
 const {userAuthMiddleware}=require("../middlewares/authMiddleware")
 
 userRouter.get("/home",productController.getHomeProductsController)
@@ -29,6 +30,9 @@ userRouter.patch("/cart/updatequantity",userAuthMiddleware,cartController.update
 userRouter.post("/cart/:productId",userAuthMiddleware,cartController.addToCart)
 userRouter.get("/cart",userAuthMiddleware,cartController.getCart)
 userRouter.delete("/cart/:productId",userAuthMiddleware,cartController.removeFromCart)
+
+userRouter.post("/payment/create-order",userAuthMiddleware,paymentController.createOrder)
+userRouter.post("/payment/verify-payment",userAuthMiddleware,paymentController.verifyPayment)
 
 
 
