@@ -8,6 +8,7 @@ const addressController=require("../controllers/user/addressController")
 const cartController=require("../controllers/user/cartController")
 const couponController=require("../controllers/user/couponController")
 const paymentController=require("../controllers/user/paymentController")
+const orderController=require("../controllers/user/orderController")
 const {userAuthMiddleware}=require("../middlewares/authMiddleware")
 
 userRouter.get("/home",productController.getHomeProductsController)
@@ -33,6 +34,9 @@ userRouter.delete("/cart/:productId",userAuthMiddleware,cartController.removeFro
 
 userRouter.post("/payment/create-order",userAuthMiddleware,paymentController.createOrder)
 userRouter.post("/payment/verify-payment",userAuthMiddleware,paymentController.verifyPayment)
+
+userRouter.get("/orders",userAuthMiddleware,orderController.getUserOrders)
+userRouter.get("/order/:orderId",userAuthMiddleware,orderController.getSingleOrder)
 
 
 
