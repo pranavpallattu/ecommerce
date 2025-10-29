@@ -4,6 +4,7 @@ const Order = require("../../models/orderSchema");
 const Cart = require("../../models/cartSchema");
 const { default: mongoose } = require("mongoose");
 const Product = require("../../models/productSchema");
+const Wallet = require("../../models/walletSchema");
 
 exports.createOrder = async (req, res) => {
   try {
@@ -80,7 +81,7 @@ exports.verifyPayment = async (req, res) => {
 
     // validate cart
 
-    const cart = await Cart.findOne({ userId: user._id}).session(session);
+    const cart = await Cart.findOne({ userId: user._id }).session(session);
 
     if (!cart || cart.items.length === 0) {
       throw new Error("Cart is empty or not found");
@@ -129,9 +130,7 @@ exports.verifyPayment = async (req, res) => {
     // deduct stock
 
     for (const item of cart.items) {
-      const product = await Product.findById(item.productId).session(
-        session
-      );
+      const product = await Product.findById(item.productId).session(session);
       if (!product || product.quantity < item.quantity) {
         throw new Error(`Insufficient stock for ${item.productName}`);
       }
@@ -152,5 +151,58 @@ exports.verifyPayment = async (req, res) => {
     session.endSession();
     console.error("verifyPayment error:", error);
     return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.refundToWallet = async (
+  paymentId,
+  amount,
+  orderId,
+  userId,
+  session
+) => {
+  try {
+    // initiate razorpay refund
+    const razorpayRefund = await razorpayInstance.payments.refund(paymentId, {
+      amount: Math.round(amount * 100),
+      speed: "normal",
+      notes: {
+        reason: "Order cancelled by user",
+        orderId: orderId.toString(),
+      },
+    });
+
+    console.log(razorpayRefund); 
+    
+    // credit amount to users wallet
+    let wallet = await Wallet.findOne({ userId }).session(session);
+    if (!wallet) {
+      wallet = new Wallet({ userId, balance: 0, transactionHistory: [] });
+    }
+
+    wallet.balance += amount;
+    wallet.transactionHistory.push({
+      type: "credit",
+      amount,
+      description: `Refund for cancelled order ${orderId}`,
+    });
+
+    await wallet.save({ session });
+
+    return {
+      success: true,
+      refundId: razorpayRefund.id,
+      amount,
+      status: "Processed",
+    };
+  } catch (error) {
+    console.error("Razorpay refund failed:", error);
+    return {
+      success: false,
+      refundId: `failed_${Date.now()}`,
+      amount,
+      status: "Failed",
+      error: error.message,
+    };
   }
 };
