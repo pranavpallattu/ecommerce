@@ -60,6 +60,7 @@ exports.verifyPayment = async (req, res) => {
       .digest("hex");
 
     if (generatedSignature !== razorpay_signature) {
+      await session.abortTransaction();
       await session.endSession();
       return res
         .status(400)
@@ -71,6 +72,7 @@ exports.verifyPayment = async (req, res) => {
       razorpayOrderId: razorpay_order_id,
     });
     if (existingOrder) {
+      await session.abortTransaction();
       await session.endSession();
       return res.status(200).json({
         success: true,
@@ -84,6 +86,9 @@ exports.verifyPayment = async (req, res) => {
     const cart = await Cart.findOne({ userId: user._id }).session(session);
 
     if (!cart || cart.items.length === 0) {
+      await session.abortTransaction();
+      session.endSession();
+
       throw new Error("Cart is empty or not found");
     }
 
@@ -94,6 +99,9 @@ exports.verifyPayment = async (req, res) => {
       0
     );
     if (calculatedSubTotal !== orderDetails.subTotal) {
+      await session.abortTransaction();
+      session.endSession();
+
       throw new Error("Amount tampering detected");
     }
 
@@ -132,6 +140,9 @@ exports.verifyPayment = async (req, res) => {
     for (const item of cart.items) {
       const product = await Product.findById(item.productId).session(session);
       if (!product || product.quantity < item.quantity) {
+        await session.abortTransaction();
+        session.endSession();
+
         throw new Error(`Insufficient stock for ${item.productName}`);
       }
       product.quantity -= item.quantity;
@@ -172,8 +183,8 @@ exports.refundToWallet = async (
       },
     });
 
-    console.log(razorpayRefund); 
-    
+    console.log(razorpayRefund);
+
     // credit amount to users wallet
     let wallet = await Wallet.findOne({ userId }).session(session);
     if (!wallet) {

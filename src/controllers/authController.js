@@ -61,7 +61,7 @@ exports.signUpController = async (req, res) => {
     await Otp.deleteMany({ emailId });
 
     // generate token
-    const token = await jwt.sign({ _id: newUser._id,role:newUser.role }, "ecommerce@2025", {
+    const token = await jwt.sign({ _id: newUser._id,role:newUser.role }, process.env.JWT_SECRET_KEY, {
       expiresIn: "1d",
     });
     console.log(token);

@@ -5,7 +5,9 @@ const transactionStatuses = [
   "Shipped",
   "Delivered",
   "Cancelled",
-  "Returned", // Covers fully refunded items
+  "PartiallyCancelled",
+  "Returned",
+  "PartiallyReturned",
   "ReturnPending",
   "ReturnRejected",
 ];
@@ -35,12 +37,13 @@ const orderSchema = new mongoose.Schema(
           enum: transactionStatuses,
           default: "Pending",
         },
-        paymentStatus: { // Consider removing if not needed
-          type: String,
-          enum: paymentStatuses,
-          default: "Pending",
-        },
-        walletAmountUsed: { type: Number, default: 0, min: 0 },
+        // paymentStatus: {
+        //   // Consider removing if not needed
+        //   type: String,
+        //   enum: paymentStatuses,
+        //   default: "Pending",
+        // },
+        // walletAmountUsed: { type: Number, default: 0, min: 0 },
         deliveredAt: { type: Date, default: null },
         cancellationReason: { type: String, default: null },
         returnReason: { type: String, default: null },
@@ -68,7 +71,11 @@ const orderSchema = new mongoose.Schema(
     subTotal: { type: Number, required: true, min: 0 },
     discount: { type: Number, default: 0, min: 0 },
     grandTotal: { type: Number, required: true, min: 0 },
-    couponId: { type: mongoose.Schema.Types.ObjectId, ref: "Coupon", default: null },
+    couponId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Coupon",
+      default: null,
+    },
     couponCode: { type: String, default: null },
     paymentMethod: {
       type: String,
@@ -118,7 +125,7 @@ orderSchema.pre("save", function (next) {
   });
   this.subTotal = this.items.reduce((sum, i) => sum + i.subtotal, 0);
   const totalRefunded = this.refunds
-    .filter(r => r.status === "Processed")
+    .filter((r) => r.status === "Processed")
     .reduce((sum, r) => sum + r.amount, 0);
   this.grandTotal = Math.max(0, this.subTotal - this.discount - totalRefunded);
   next();

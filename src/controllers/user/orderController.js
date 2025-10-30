@@ -5,6 +5,22 @@ const Wallet = require("../../models/walletSchema");
 const Product = require("../../models/productSchema");
 const { refundToWallet } = require("./paymentController");
 
+// At the top of your controller
+const allowedItemStatuses = [
+  "Pending",
+  "Processing",
+  "Shipped",
+  "Delivered",
+  "Cancelled",
+  "Returned",
+  "ReturnPending",
+  "PartiallyReturned",
+  "PartiallyCancelled",
+  "ReturnRejected",
+];
+
+const CANCELLABLE_ITEM_STATUSES = ["Pending", "Processing"];
+
 exports.placeOrder = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -170,6 +186,9 @@ exports.orderCancel = async (req, res) => {
 
     // validate Id
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      await session.abortTransaction();
+      session.endSession();
+
       return res.status(400).json({
         success: false,
         message: "Invalid order ID",
@@ -183,6 +202,9 @@ exports.orderCancel = async (req, res) => {
     }).session(session);
 
     if (!order) {
+      await session.abortTransaction();
+      session.endSession();
+
       return res.status(404).json({
         success: false,
         message: "Order not found",
@@ -201,14 +223,15 @@ exports.orderCancel = async (req, res) => {
         ReturnRejected: "Return rejected.",
       };
 
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message:
-            statusMsg[order.orderStatus] ||
-            `Cannot cancel in ${order.orderStatus} status`,
-        });
+      await session.abortTransaction();
+      session.endSession();
+
+      return res.status(400).json({
+        success: false,
+        message:
+          statusMsg[order.orderStatus] ||
+          `Cannot cancel in ${order.orderStatus} status`,
+      });
     }
 
     // update order
@@ -255,6 +278,15 @@ exports.orderCancel = async (req, res) => {
       });
 
       await wallet.save({ session });
+
+      // Add refund record
+
+      refundRecord = {
+        refundId: `wallet_refund_${Date.now()}_${item._id.toString()}`,
+        amount: refundAmount,
+        itemIds: order.items.map((i) => i._id),
+        status: "Processed",
+      };
     }
 
     // handle razorpay refund  to wallet
@@ -273,14 +305,21 @@ exports.orderCancel = async (req, res) => {
         refundId: result.refundId,
         amount: order.grandTotal,
         itemIds: order.items.map((i) => i._id),
-        status: result.status,
+        status: "Processed",
       };
 
       if (!result.success) {
+        await session.abortTransaction();
+        session.endSession();
+
         console.warn(
           "Razorpay refund failed, but order cancelled:",
           result.error
         );
+
+        return res
+          .status(500)
+          .json({ success: false, message: "Refund failed: " + result.error });
       }
     }
 
@@ -319,11 +358,249 @@ exports.orderCancel = async (req, res) => {
     await session.abortTransaction();
     session.endSession();
     console.error("order Cancel error " + error);
-    return res
-      .status(500)
-      .json({
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to cancel order",
+    });
+  }
+};
+
+exports.cancelSingleItem = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  try {
+    const { orderId } = req.params;
+    const { itemId, reason } = req.body;
+    const user = req.user;
+
+    // validate id
+    if (
+      !mongoose.Types.ObjectId.isValid(orderId) ||
+      !mongoose.Types.ObjectId.isValid(itemId)
+    ) {
+      await session.abortTransaction();
+      session.endSession();
+
+      return res.status(400).json({ success: false, message: "Invalid id" });
+    }
+
+    //find order
+
+    const order = await Order.findOne({
+      _id: orderId,
+      userId: user._id,
+    }).session(session);
+    if (!order) {
+      await session.abortTransaction();
+      session.endSession();
+
+      return res
+        .status(404)
+        .json({ success: false, message: "Order not found" });
+    }
+
+    // Order-level check
+    if (!["Pending", "Processing"].includes(order.orderStatus)) {
+      await session.abortTransaction();
+      session.endSession();
+
+      return res
+        .status(400)
+        .json({ success: false, message: "Order not in cancellable state" });
+    }
+
+    // find item
+    const item = order.items.find(
+      (item) => item._id.toString() === itemId.toString()
+    );
+    if (!item) {
+      await session.abortTransaction();
+      session.endSession();
+
+      return res
+        .status(404)
+        .json({ success: false, message: "Item not found" });
+    }
+
+    if (!allowedItemStatuses.includes(item.itemStatus)) {
+      await session.abortTransaction();
+      session.endSession();
+
+      return res
+        .status(400)
+        .json({ succes: false, message: "Invalid Item Status" });
+    }
+
+    // 2. Allow cancel only in Pending/Processing
+    if (!CANCELLABLE_ITEM_STATUSES.includes(item.itemStatus)) {
+      const messages = {
+        Shipped: "Item already shipped. Contact support.",
+        Delivered: "Item already delivered.",
+        Cancelled: "Item already cancelled.",
+        Returned: "Item already returned.",
+        ReturnPending: "Return in progress.",
+        ReturnRejected: "Return rejected.",
+      };
+
+      await session.abortTransaction();
+      session.endSession();
+
+      return res.status(400).json({
         success: false,
-        message: error.message || "Failed to cancel order",
+        message: messages[item.itemStatus] || "Cannot cancel item",
       });
+    }
+
+    // update item
+    item.itemStatus = "Cancelled";
+    item.cancellationReason = reason || "User requested cancellation";
+
+    // Restore stock
+    const product = await Product.findById(item.productId).session(session);
+    if (product) {
+      product.quantity += item.quantity;
+      await product.save({ session });
+    }
+
+    // === CALCULATE REFUND ===
+    const itemRatio = item.subtotal / order.subTotal;
+    const proratedDiscount = itemRatio * order.discount;
+    let refundAmount = item.subtotal - proratedDiscount;
+
+    // === CAP REFUND ===
+    const totalProcessed = order
+      .refunds((refundRecord) => refundRecord.status === "Processed")
+      .reduce((sum, refundRecord) => sum + refundRecord.amount, 0);
+
+    const maxRefundable = order.grandTotal - totalProcessed;
+
+    refundAmount = Math.min(refundAmount, maxRefundable);
+
+    let refundRecord = null;
+
+    // Handle wallet refund (immediate)
+    if (order.paymentMethod === "wallet" && order.walletAmountUsed > 0) {
+      const prorated =
+        (item.subtotal / order.subTotal) * order.walletAmountUsed;
+      const walletRefund = Math.min(
+        prorated,
+        order.walletAmountUsed - totalProcessed
+      );
+      let wallet = await Wallet.findOne({ userId: user._id }).session(session);
+      if (!wallet) {
+        wallet = new Wallet({
+          userId: user._id,
+          balance: 0,
+          transactionHistory: [],
+        });
+      }
+      wallet.balance += refundAmount;
+      wallet.transactionHistory.push({
+        type: "credit",
+        amount: refundAmount,
+        description: `Refund for cancelled item #${item._id}`,
+      });
+
+      await wallet.save({ session });
+
+      // Add refund record
+
+      refundRecord = {
+        refundId: `wallet_refund_${Date.now()}_${item._id.toString()}`,
+        amount: refundAmount,
+        itemIds: [item._id],
+        status: "Processed",
+      };
+    }
+
+    // handle razorpay refund  to wallet
+
+    if (order.paymentMethod === "razorpay" && order.razorpayPaymentId) {
+      const result = await refundToWallet(
+        order.razorpayPaymentId,
+        Math.round(refundAmount * 100),
+        order._id,
+        user._id,
+        session
+      );
+
+      if (!result.success) {
+        console.warn("Razorpay Single Item refund failed", result.error);
+      }
+    }
+
+    refundRecord = {
+      refundId: result.refundId,
+      amount: refundAmount,
+      itemIds: [item._id],
+      status: "Processed",
+    };
+
+    order.subTotal -= item.subtotal;
+    order.discount = proratedDiscount;
+
+    // === COUPON THRESHOLD ===
+    if (order.couponId && order.subTotal < grandTotal) {
+      // example threshold
+      order.couponId = null;
+      order.couponCode = null;
+      order.discount = 0;
+    }
+
+    const cancelledCount = order.items.filter(
+      (item) => item.itemStatus === "Cancelled"
+    ).length;
+    const totalCount = order.items.length;
+
+    if (cancelledCount === totalCount) {
+      order.orderStatus = "Cancelled";
+    } else if (cancelledCount > 0) {
+      order.orderStatus = "PartiallyCancelled";
+    }
+
+    // update payment status
+
+    if (refundAmount > 0) {
+      order.paymentStatus = "Refunded";
+    }
+
+    if (refundRecord) {
+      order.refunds.push(refundRecord);
+    }
+
+    // 14. Save order
+    await order.save({ session });
+
+    // 15. Commit transaction
+    await session.commitTransaction();
+    session.endSession();
+
+    return res.status(200).json({
+      success: true,
+      message: "Item cancelled successfully",
+      data: {
+        orderId: order._id,
+        cancelledItem: {
+          productId: item.productId,
+          name: item.productName,
+          image: item.productImage,
+          quantity: item.quantity,
+          price: item.price,
+          subtotal: item.subtotal,
+        },
+        refundAmount: refundAmount > 0 ? refundAmount : null,
+        refundedTo: refundAmount > 0 ? "wallet" : null,
+        razorpayRefundId: refundRecord?.refundId || null,
+        orderStatus: order.orderStatus,
+      },
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    console.error("Cancel single item error " + error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to cancel order",
+    });
   }
 };
