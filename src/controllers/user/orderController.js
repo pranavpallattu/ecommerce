@@ -4,6 +4,7 @@ const Cart = require("../../models/cartSchema");
 const Wallet = require("../../models/walletSchema");
 const Product = require("../../models/productSchema");
 const { refundToWallet } = require("./paymentController");
+const Coupon = require("../../models/couponSchema");
 
 // At the top of your controller
 const allowedItemStatuses = [
@@ -410,9 +411,7 @@ exports.cancelSingleItem = async (req, res) => {
     }
 
     // find item
-    const item = order.items.find(
-      (item) => item._id.toString() === itemId.toString()
-    );
+    const item = order.items.id(itemId)
     if (!item) {
       await session.abortTransaction();
       session.endSession();
@@ -428,7 +427,7 @@ exports.cancelSingleItem = async (req, res) => {
 
       return res
         .status(400)
-        .json({ succes: false, message: "Invalid Item Status" });
+        .json({ success: false, message: "Invalid Item Status" });
     }
 
     // 2. Allow cancel only in Pending/Processing
@@ -468,8 +467,7 @@ exports.cancelSingleItem = async (req, res) => {
     let refundAmount = item.subtotal - proratedDiscount;
 
     // === CAP REFUND ===
-    const totalProcessed = order
-      .refunds((refundRecord) => refundRecord.status === "Processed")
+    const totalProcessed = order.refunds.filter(refundRecord => refundRecord.status === "Processed")
       .reduce((sum, refundRecord) => sum + refundRecord.amount, 0);
 
     const maxRefundable = order.grandTotal - totalProcessed;
@@ -497,7 +495,7 @@ exports.cancelSingleItem = async (req, res) => {
       wallet.balance += refundAmount;
       wallet.transactionHistory.push({
         type: "credit",
-        amount: refundAmount,
+        amount: walletRefund,
         description: `Refund for cancelled item #${item._id}`,
       });
 
@@ -507,7 +505,7 @@ exports.cancelSingleItem = async (req, res) => {
 
       refundRecord = {
         refundId: `wallet_refund_${Date.now()}_${item._id.toString()}`,
-        amount: refundAmount,
+        amount: walletRefund,
         itemIds: [item._id],
         status: "Processed",
       };
@@ -516,31 +514,49 @@ exports.cancelSingleItem = async (req, res) => {
     // handle razorpay refund  to wallet
 
     if (order.paymentMethod === "razorpay" && order.razorpayPaymentId) {
-      const result = await refundToWallet(
-        order.razorpayPaymentId,
-        Math.round(refundAmount * 100),
-        order._id,
-        user._id,
-        session
+      const prorated =
+        (item.subtotal / order.subTotal) * order.walletAmountUsed;
+      const walletRefund = Math.min(
+        prorated,
+        order.walletAmountUsed - totalProcessed
       );
-
-      if (!result.success) {
-        console.warn("Razorpay Single Item refund failed", result.error);
+      let wallet = await Wallet.findOne({ userId: user._id }).session(session);
+      if (!wallet) {
+        wallet = new Wallet({
+          userId: user._id,
+          balance: 0,
+          transactionHistory: [],
+        });
       }
+      wallet.balance += refundAmount;
+      wallet.transactionHistory.push({
+        type: "credit",
+        amount: walletRefund,
+        description: `Refund for cancelled item #${item._id}`,
+      });
+
+      await wallet.save({ session });
+
+      // Add refund record
+
+      refundRecord = {
+        refundId: `wallet_refund_${Date.now()}_${item._id.toString()}`,
+        amount: walletRefund,
+        itemIds: [item._id],
+        status: "Processed",
+      };
     }
 
-    refundRecord = {
-      refundId: result.refundId,
-      amount: refundAmount,
-      itemIds: [item._id],
-      status: "Processed",
-    };
 
     order.subTotal -= item.subtotal;
-    order.discount = proratedDiscount;
+    order.discount -= proratedDiscount;
 
     // === COUPON THRESHOLD ===
-    if (order.couponId && order.subTotal < grandTotal) {
+
+    const coupon= await Coupon.findById(order.couponId)
+
+
+    if (order.couponId && order.subTotal < coupon.minPurchase) {
       // example threshold
       order.couponId = null;
       order.couponCode = null;

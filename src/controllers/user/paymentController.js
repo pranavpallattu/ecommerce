@@ -165,55 +165,100 @@ exports.verifyPayment = async (req, res) => {
   }
 };
 
-exports.refundToWallet = async (
-  paymentId,
-  amount,
-  orderId,
-  userId,
-  session
-) => {
-  try {
-    // initiate razorpay refund
-    const razorpayRefund = await razorpayInstance.payments.refund(paymentId, {
-      amount: Math.round(amount * 100),
-      speed: "normal",
-      notes: {
-        reason: "Order cancelled by user",
-        orderId: orderId.toString(),
-      },
-    });
+// exports.refundToWallet = async (
+//   paymentId,
+//   amount,
+//   orderId,
+//   userId,
+//   session
+// ) => {
+//   try {
+//     // initiate razorpay refund
+//     const razorpayRefund = await razorpayInstance.payments.refund(paymentId, {
+//       amount: Math.round(amount * 100),
+//       speed: "normal",
+//       notes: {
+//         reason: "Order cancelled by user",
+//         orderId: orderId.toString(),
+//       },
+//     });
 
-    console.log(razorpayRefund);
+//     console.log(razorpayRefund);
 
-    // credit amount to users wallet
-    let wallet = await Wallet.findOne({ userId }).session(session);
-    if (!wallet) {
-      wallet = new Wallet({ userId, balance: 0, transactionHistory: [] });
-    }
+//     // credit amount to users wallet
+//     let wallet = await Wallet.findOne({ userId }).session(session);
+//     if (!wallet) {
+//       wallet = new Wallet({ userId, balance: 0, transactionHistory: [] });
+//     }
 
-    wallet.balance += amount;
-    wallet.transactionHistory.push({
-      type: "credit",
-      amount,
-      description: `Refund for cancelled order ${orderId}`,
-    });
+//     wallet.balance += amount;
+//     wallet.transactionHistory.push({
+//       type: "credit",
+//       amount,
+//       description: `Refund for cancelled order ${orderId}`,
+//     });
 
-    await wallet.save({ session });
+//     await wallet.save({ session });
 
-    return {
-      success: true,
-      refundId: razorpayRefund.id,
-      amount,
-      status: "Processed",
-    };
-  } catch (error) {
-    console.error("Razorpay refund failed:", error);
-    return {
-      success: false,
-      refundId: `failed_${Date.now()}`,
-      amount,
-      status: "Failed",
-      error: error.message,
-    };
-  }
-};
+//     return {
+//       success: true,
+//       refundId: razorpayRefund.id,
+//       amount,
+//       status: "Processed",
+//     };
+//   } catch (error) {
+//     console.error("Razorpay refund failed:", error);
+//     return {
+//       success: false,
+//       refundId: `failed_${Date.now()}`,
+//       amount,
+//       status: "Failed",
+//       error: error.message,
+//     };
+//   }
+// };
+
+
+
+// exports.refundToWallet = async (
+//   paymentId,
+//   amount,
+//   orderId,
+//   userId,
+//   session
+// ) => {
+//   try {
+    
+
+//     // credit amount to users wallet
+//     let wallet = await Wallet.findOne({ userId }).session(session);
+//     if (!wallet) {
+//       wallet = new Wallet({ userId, balance: 0, transactionHistory: [] });
+//     }
+
+//     wallet.balance += amount;
+//     wallet.transactionHistory.push({
+//       type: "credit",
+//       amount,
+//       description: `Refund for cancelled order ${orderId}`,
+//     });
+
+//     await wallet.save({ session });
+
+//     return {
+//       success: true,
+//       refundId: razorpayRefund.id,
+//       amount,
+//       status: "Processed",
+//     };
+//   } catch (error) {
+//     console.error("Razorpay refund failed:", error);
+//     return {
+//       success: false,
+//       refundId: `failed_${Date.now()}`,
+//       amount,
+//       status: "Failed",
+//       error: error.message,
+//     };
+//   }
+// };
