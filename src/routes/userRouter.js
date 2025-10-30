@@ -35,8 +35,11 @@ userRouter.delete("/cart/:productId",userAuthMiddleware,cartController.removeFro
 userRouter.post("/payment/create-order",userAuthMiddleware,paymentController.createOrder)
 userRouter.post("/payment/verify-payment",userAuthMiddleware,paymentController.verifyPayment)
 
+userRouter.post("/orders/:orderId/cancel-item",userAuthMiddleware,orderController.cancelSingleItem)
+
 userRouter.get("/orders",userAuthMiddleware,orderController.getUserOrders)
 userRouter.get("/order/:orderId",userAuthMiddleware,orderController.getSingleOrder)
+
 
 
 
