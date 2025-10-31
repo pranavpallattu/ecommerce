@@ -159,9 +159,11 @@ exports.verifyPayment = async (req, res) => {
       .json({ success: true, message: "Payment verified & order saved" });
   } catch (error) {
     await session.abortTransaction();
-    session.endSession();
     console.error("verifyPayment error:", error);
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message ,data:order});
+  }
+  finally{
+    session.endSession();
   }
 };
 

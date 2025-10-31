@@ -11,7 +11,7 @@ const transactionStatuses = [
   "ReturnPending",
   "ReturnRejected",
 ];
-const paymentStatuses = ["Pending", "Paid", "Failed", "Refunded", "N/A"];
+const paymentStatuses = ["Pending", "Paid", "Failed", "Refunded", "PartiallyRefunded", "N/A"];
 
 const orderSchema = new mongoose.Schema(
   {
@@ -37,13 +37,6 @@ const orderSchema = new mongoose.Schema(
           enum: transactionStatuses,
           default: "Pending",
         },
-        // paymentStatus: {
-        //   // Consider removing if not needed
-        //   type: String,
-        //   enum: paymentStatuses,
-        //   default: "Pending",
-        // },
-        // walletAmountUsed: { type: Number, default: 0, min: 0 },
         deliveredAt: { type: Date, default: null },
         cancellationReason: { type: String, default: null },
         returnReason: { type: String, default: null },
