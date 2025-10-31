@@ -638,3 +638,70 @@ exports.cancelSingleItem = async (req, res) => {
     await session.endSession();
   }
 };
+
+exports.orderReturn = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { reason } = req.body;
+    const user = req.user;
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID",
+      });
+    }
+
+    if (!reason || reason.trim().length === 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Return reason cannot be empty" });
+    }
+
+    const order = await Order.findOne({
+      _id: orderId,
+      userId: user._id,
+    }).populate("items.productId");
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    if (order.orderStatus !== "Delivered") {
+      return res.status(400).json({
+        success: false,
+        message: "Only delivered orders can be returned",
+      });
+    }
+
+    if (["Returned", "ReturnPending"].includes(order.orderStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Order already returned or return is pending",
+      });
+    }
+
+    order.orderStatus = "ReturnPending";
+    order.returnedReason = reason;
+
+    await order.save();
+
+    return res.status(201).json({
+      success: true,
+      message: "Return request submitted successfully",
+      data: {
+        orderId: order._id,
+        orderStatus: order.orderStatus,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to return order",
+    });
+  }
+};

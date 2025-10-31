@@ -11,7 +11,14 @@ const transactionStatuses = [
   "ReturnPending",
   "ReturnRejected",
 ];
-const paymentStatuses = ["Pending", "Paid", "Failed", "Refunded", "PartiallyRefunded", "N/A"];
+const paymentStatuses = [
+  "Pending",
+  "Paid",
+  "Failed",
+  "Refunded",
+  "PartiallyRefunded",
+  "N/A",
+];
 
 const orderSchema = new mongoose.Schema(
   {
@@ -105,6 +112,7 @@ const orderSchema = new mongoose.Schema(
     deliveredAt: { type: Date, default: null },
     cancelledAt: { type: Date, default: null },
     cancelledReason: { type: String, default: null },
+    returnedReason: { type: String, default: null },
   },
   { timestamps: true }
 );
