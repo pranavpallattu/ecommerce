@@ -705,3 +705,86 @@ exports.orderReturn = async (req, res) => {
     });
   }
 };
+
+exports.itemReturn = async (req, res) => {
+  try {
+    const { orderId, itemId } = req.params;
+    const { reason } = req.body;
+    const user = req.user;
+
+    if (
+      !mongoose.Types.ObjectId.isValid(orderId) ||
+      !mongoose.Types.ObjectId.isValid(itemId)
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid order or item id" });
+    }
+
+    if (!reason || reason.trim().length === 0) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Return reason cannot be empty" });
+    }
+
+    const order = await Order.findOne({
+      _id: orderId,
+      userId: user._id,
+    }).populate("items.productId");
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    const item = order.items.id(itemId);
+    if (!item) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Item not found in order" });
+    }
+
+    if (["Returned", "ReturnPending"].includes(item.itemStatus)) {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Item already returned or return is pending",
+        });
+    }
+
+    if (item.itemStatus !== "Delivered") {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message: "Only delivered items can be returned",
+        });
+    }
+
+    item.itemStatus = "ReturnPending";
+    item.returnReason = reason;
+    item.returnRequestedAt= new Date();
+
+    // Save order
+    await order.save();
+
+    return res.status(201).json({
+      success: true,
+      message: "Return request submitted successfully",
+      data: {
+        orderId: order._id,
+        itemId: item._id,
+        itemStatus: item.itemStatus,
+      },
+    });
+  } catch (error) {
+      console.error("Return item error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to process item return",
+    });
+  }
+};
