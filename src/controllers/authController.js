@@ -9,7 +9,7 @@ const Otp = require("../models/otpSchema");
 exports.googleVerifyCallback = async (req, res) => {
   try {
     const user = req.user;
-    const token = await jwt.sign({ _id: user._id }, "ecommerce@2025", {
+    const token = await jwt.sign({ _id: user._id }, process.env.JWT_SECRET_KEY, {
       expiresIn: "1d",
     });
     console.log(token);
@@ -111,7 +111,7 @@ if (user.isBlocked) {
     // set token
 
     // generate token
-    const token = await jwt.sign({ _id: user._id, role: user.role }, "ecommerce@2025", {
+    const token = await jwt.sign({ _id: user._id, role: user.role }, process.env.JWT_SECRET_KEY, {
       expiresIn: "1d",
     });
     console.log(token);

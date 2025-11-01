@@ -6,6 +6,8 @@ const categoryController=require("../controllers/categoryController")
 const productController=require("../controllers/productController")
 const customerController=require("../controllers/customerController")
 const couponController=require("../controllers/couponController")
+const orderController=require("../controllers/orderController")
+
 
 const {adminAuthMiddleware}=require("../middlewares/authMiddleware")
 const upload = require("../middlewares/multerMiddleware")
@@ -23,5 +25,7 @@ adminRouter.patch("/admin/user/:id",adminAuthMiddleware,customerController.updat
 adminRouter.post("/admin/add-coupon",adminAuthMiddleware,couponController.addCouponController)
 adminRouter.patch("/admin/coupon/:id",adminAuthMiddleware,couponController.updateCouponStatusController)
 adminRouter.patch("/admin/coupon/edit/:id",adminAuthMiddleware,couponController.editCouponController)
+adminRouter.get("/admin/orders",adminAuthMiddleware,orderController.listOrders)
+
 
 module.exports=adminRouter
