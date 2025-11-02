@@ -1,3 +1,4 @@
+const { default: mongoose } = require("mongoose");
 const Order = require("../models/orderSchema");
 const Product = require("../models/productSchema");
 const User = require("../models/userSchema");
@@ -60,3 +61,27 @@ exports.listOrders = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
+
+
+exports.viewOrder=async(req,res)=>{
+  try{
+    const {orderId}=req.params
+    const user=req.user
+
+    if(!mongoose.Types.ObjectId.isValid(orderId)){
+      return res.status(400).json({success:fale,message:"Invalid orderId"})
+    }
+
+    const order=await Order.findById(orderId).populate("userId", "name emailId").populate("items.productId", "productName productImage price");
+    if(!order){
+      return res.status(409).json({success:false,message:"Order not found"})
+    }
+
+    return res.status(200).json({success:true, message: "Order fetched successfully",data:order})
+
+  }
+  catch (error) {
+    console.error("Error fetching order", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+}
