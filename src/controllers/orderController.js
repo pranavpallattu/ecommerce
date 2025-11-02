@@ -117,14 +117,12 @@ exports.orderStatus = async (req, res) => {
     const validStatuses = Object.keys(STATUS_TRANSITIONS);
     if (!status || !validStatuses.includes(status)) {
       await session.abortTransaction();
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: `Invalid status. Status must be one of ${validStatuses.join(
-            ", "
-          )} `,
-        });
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status. Status must be one of ${validStatuses.join(
+          ", "
+        )} `,
+      });
     }
 
     const order = await Order.findById(orderId);
@@ -152,22 +150,16 @@ exports.orderStatus = async (req, res) => {
       });
     }
 
-    if(status === "Delivered"){
+    if (status === "Delivered") {
       order.deliveredAt = new Date();
-      for(const item of order.items){
-        item.itemStatus = "Delivered"
+      for (const item of order.items) {
+        item.itemStatus = "Delivered";
       }
     }
 
     // 7. === CANCELLATION: RESTORE STOCK + REFUND ===
-    if(status=== "Cancelled" && order.orderStatus !== "Cancelled"){
-      
+    if (status === "Cancelled" && order.orderStatus !== "Cancelled") {
     }
-
-
-
-
-
   } catch (error) {
     console.error("Error updating order status", error);
     return res.status(500).json({ success: false, message: error.message });

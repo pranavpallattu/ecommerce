@@ -1,9 +1,7 @@
 const mongoose = require("mongoose");
 
 const connectDB = async () => {
-  await mongoose.connect(
-    "mongodb+srv://pranavps:pranav%402004@cluster0.jgq01ru.mongodb.net/ecommerce?retryWrites=true&w=majority&appName=ecommerce"
-  );
+  await mongoose.connect(process.env.MONGODB_URI);
 };
 
 module.exports = connectDB;
