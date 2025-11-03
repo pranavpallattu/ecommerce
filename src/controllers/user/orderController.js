@@ -19,7 +19,7 @@ const allowedItemStatuses = [
   "ReturnRejected",
 ];
 
-const CANCELLABLE_STATUSES = ["Pending", "Processing"];
+const CANCELLABLE_STATUSES = ["Pending", "Processing", "Shipped"];
 
 exports.placeOrder = async (req, res) => {
   const session = await mongoose.startSession();

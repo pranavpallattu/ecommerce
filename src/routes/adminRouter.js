@@ -27,6 +27,7 @@ adminRouter.patch("/admin/coupon/:id",adminAuthMiddleware,couponController.updat
 adminRouter.patch("/admin/coupon/edit/:id",adminAuthMiddleware,couponController.editCouponController)
 adminRouter.get("/admin/orders",adminAuthMiddleware,orderController.listOrders)
 
-adminRouter.get("/admin/orders/:orderId",adminAuthMiddleware,orderController.viewOrder)
+adminRouter.get("/admin/orders/:orderId",adminAuthMiddleware,orderController.viewOrder);
+adminRouter.post("/admin/orders/:orderId",adminAuthMiddleware,orderController.orderStatus);
 
 module.exports=adminRouter

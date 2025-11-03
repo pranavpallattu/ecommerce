@@ -42,7 +42,7 @@ const orderSchema = new mongoose.Schema(
         itemStatus: {
           type: String,
           enum: transactionStatuses,
-          default: "Pending",
+          default: "Processing",
         },
         deliveredAt: { type: Date, default: null },
         cancellationReason: { type: String, default: null },
@@ -93,7 +93,7 @@ const orderSchema = new mongoose.Schema(
     orderStatus: {
       type: String,
       enum: transactionStatuses,
-      default: "Pending",
+      default: "Processing",
     },
     refunds: [
       {

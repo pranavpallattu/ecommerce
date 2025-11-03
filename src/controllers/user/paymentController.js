@@ -117,7 +117,6 @@ exports.verifyPayment = async (req, res) => {
         price: item.price,
         subtotal: item.price * item.quantity,
         itemStatus: "Processing",
-        paymentStatus: "Paid",
       })),
       address: {
         addressId: orderDetails.address.addressId,
