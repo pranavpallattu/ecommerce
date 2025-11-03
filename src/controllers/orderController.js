@@ -104,7 +104,7 @@ exports.orderStatus = async (req, res) => {
   };
   // const DEFAULT_STATUS = "Processing";
 
-  const CANCELLABLE_ITEM_STATUSES = ["Pending", "Processing", "Shipped"];
+  const CANCELLABLE_ITEM_STATUSES = ["Processing", "Shipped"];
 
   const NON_CANCELLABLE_ITEM_STATUSES = [
     "Delivered",

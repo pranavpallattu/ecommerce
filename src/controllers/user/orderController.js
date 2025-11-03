@@ -7,7 +7,6 @@ const Coupon = require("../../models/couponSchema");
 
 // At the top of your controller
 const allowedItemStatuses = [
-  "Pending",
   "Processing",
   "Shipped",
   "Delivered",
@@ -19,33 +18,36 @@ const allowedItemStatuses = [
   "ReturnRejected",
 ];
 
-const CANCELLABLE_STATUSES = ["Pending", "Processing", "Shipped"];
+const CANCELLABLE_STATUSES = ["Processing", "Shipped"];
+
+
+// remove abort transactions and only give it in catch block as we cant abort a transaction twice
 
 exports.placeOrder = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
     const { paymentMethod, address, couponId, couponCode } = req.body;
+    console.log(paymentMethod);
     const user = req.user;
+    
 
     // validate payment method
     if (!["cod", "wallet"].includes(paymentMethod)) {
-      await session.abortTransaction();
       throw new Error("Invalid payment method");
     }
 
     if (!address?.addressId || !address?.snapshot) {
-      await session.abortTransaction();
       throw new Error("Address is required");
     }
 
     // validate cart
     const cart = await Cart.findOne({ userId: user._id }).session(session);
     if (!cart || cart.items.length === 0) {
-      await session.abortTransaction();
-
       throw new Error("Cart is empty");
     }
+
+    
 
     const subTotal = cart.items.reduce(
       (sum, item) => sum + item.price * item.quantity,
@@ -61,8 +63,6 @@ exports.placeOrder = async (req, res) => {
         session
       );
       if (!wallet || wallet.balance < grandTotal) {
-        await session.abortTransaction();
-
         throw new Error("Insufficient wallet balance");
       }
 
@@ -76,12 +76,11 @@ exports.placeOrder = async (req, res) => {
       await wallet.save({ session });
     }
 
+    
     // stock deduction
     for (const item of cart.items) {
-      const product = await Product.findById(item.productId).session(session);
+      const product = await Product.findById(item.product).session(session);      
       if (!product || product.quantity < item.quantity) {
-        await session.abortTransaction();
-
         throw new Error(`Low stock: ${item.productName}`);
       }
 
@@ -89,17 +88,18 @@ exports.placeOrder = async (req, res) => {
       await product.save({ session });
     }
 
+    await cart.populate("items.product")
+
     const order = new Order({
       userId: user._id,
       items: cart.items.map((item) => ({
-        productId: item.productId,
-        productName: item.productName,
+        productId: item.product,
+        productName: item.product.productName,
         productImage: item.productImage,
         quantity: item.quantity,
         price: item.price,
         subtotal: item.price * item.quantity,
-        itemStatus: paymentMethod === "cod" ? "Pending" : "Processing",
-        paymentStatus: paymentMethod === "cod" ? "Pending" : "Paid",
+        itemStatus: "Processing",
       })),
       address: {
         addressId: address.addressId,
@@ -113,7 +113,7 @@ exports.placeOrder = async (req, res) => {
       walletAmountUsed: walletUsed,
       paymentMethod,
       paymentStatus: paymentMethod === "cod" ? "Pending" : "Paid",
-      orderStatus: paymentMethod === "cod" ? "Pending" : "Processing",
+      orderStatus: "Processing",
     });
 
     await order.save({ session });
@@ -128,7 +128,6 @@ exports.placeOrder = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
-
     return res.status(500).json({ success: false, message: error.message });
   } finally {
     session.endSession();
@@ -258,7 +257,7 @@ exports.orderCancel = async (req, res) => {
     // Restore stock
 
     for (const item of order.items) {
-      const product = await Product.findById(item.productId).session(session);
+      const product = await Product.findById(item.product).session(session);
       if (product) {
         product.quantity += item.quantity;
         await product.save({ session });
@@ -461,7 +460,7 @@ exports.cancelSingleItem = async (req, res) => {
     item.cancellationReason = reason || "User requested cancellation";
 
     // Restore stock
-    const product = await Product.findById(item.productId).session(session);
+    const product = await Product.findById(item.product).session(session);
     if (product) {
       product.quantity += item.quantity;
       await product.save({ session });
@@ -612,7 +611,7 @@ exports.cancelSingleItem = async (req, res) => {
       data: {
         orderId: order._id,
         cancelledItem: {
-          productId: item.productId,
+          productId: item.product,
           name: item.productName,
           image: item.productImage,
           quantity: item.quantity,

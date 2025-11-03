@@ -37,6 +37,8 @@ userRouter.post("/payment/verify-payment",userAuthMiddleware,paymentController.v
 
 userRouter.post("/orders/:orderId/cancel-item",userAuthMiddleware,orderController.cancelSingleItem)
 
+userRouter.post("/orders",userAuthMiddleware,orderController.placeOrder)
+
 userRouter.get("/orders",userAuthMiddleware,orderController.getUserOrders)
 userRouter.get("/order/:orderId",userAuthMiddleware,orderController.getSingleOrder)
 
