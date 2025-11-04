@@ -535,6 +535,54 @@ exports.orderReturnApprove = async (req, res) => {
   }
 };
 
+exports.orderReturnReject = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "OrderId is not valid" });
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Order not found" });
+    }
+
+    if (order.orderStatus === "ReturnRejected") {
+      return res.status(409).json({
+        success: false,
+        message: "Order already in Return Rejected state ",
+      });
+    }
+
+    if (order.orderStatus !== "ReturnPending") {
+      return res.status(409).json({
+        success: false,
+        message: "Order in Return Pending state can only be rejected",
+      });
+    }
+
+    order.orderStatus = "ReturnRejected";
+    for (const item of order.items) {
+      item.itemStatus = "ReturnRejected";
+    }
+
+    await order.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Order return rejected successfully",
+      data: { id: orderId, status: order.orderStatus },
+    });
+  } catch (error) {
+    console.error("Error updating order return reject", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 //     refundId: `razorpay_wallet_refund_${Date.now()}_${
 //       order._id
 //     }_${Math.random().toString(36).substring(2, 7)}`,
