@@ -27,10 +27,14 @@ adminRouter.patch("/admin/coupon/:id",adminAuthMiddleware,couponController.updat
 adminRouter.patch("/admin/coupon/edit/:id",adminAuthMiddleware,couponController.editCouponController)
 adminRouter.get("/admin/orders",adminAuthMiddleware,orderController.listOrders)
 
+adminRouter.patch("/admin/orders/return/reject/:orderId/:itemId",adminAuthMiddleware,orderController.itemReturnReject);
+
+
 adminRouter.get("/admin/orders/:orderId",adminAuthMiddleware,orderController.viewOrder);
 adminRouter.post("/admin/orders/:orderId",adminAuthMiddleware,orderController.orderStatus);
 adminRouter.post("/admin/orders/return/approve/:orderId",adminAuthMiddleware,orderController.orderReturnApprove);
-adminRouter.patch("/admin/orders/return/reject/:orderId",adminAuthMiddleware,orderController.orderReturnReject);
+// adminRouter.patch("/admin/orders/return/reject/:orderId",adminAuthMiddleware,orderController.orderReturnReject);
+
 
 
 module.exports=adminRouter

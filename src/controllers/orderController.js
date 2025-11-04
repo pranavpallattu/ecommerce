@@ -583,6 +583,96 @@ exports.orderReturnReject = async (req, res) => {
   }
 };
 
+exports.itemReturnReject = async (req, res) => {
+  const session = await mongoose.startSession();
+  await session.startTransaction();
+
+  try {
+    const { orderId, itemId } = req.params;
+
+    // validate IDs
+    if (
+      !mongoose.Types.ObjectId.isValid(orderId) ||
+      !mongoose.Types.ObjectId.isValid(itemId)
+    ) {
+      await session.abortTransaction();
+      await session.endSession();
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid orderId or itemId" });
+    }
+
+    //find order
+    const order = await Order.findById(orderId).session(session);
+    if (!order) {
+      await session.abortTransaction();
+      await session.endSession();
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // find the specific orer
+    const item = order.items.id(itemId);
+    if (!item) {
+      await session.abortTransaction();
+      await session.endSession();
+      return res.status(404).json({
+        success: false,
+        message: "Item not found",
+      });
+    }
+
+    // validation
+
+    if (item.itemStatus === "ReturnRejected") {
+      await session.abortTransaction();
+      await session.endSession();
+      return res.status(409).json({
+        success: false,
+        message: "Item already in Return Rejected state",
+      });
+    }
+
+    if (item.itemStatus !== "ReturnPending") {
+      await session.abortTransaction();
+      await session.endSession();
+      return res.status(409).json({
+        success: false,
+        message: "Only items in Return Pending state can be rejected",
+      });
+    }
+
+    // update item status
+
+    item.itemStatus="ReturnRejected"
+    item.returnApprovedAt=new Date();
+
+
+
+    await order.save({ session });
+    await session.commitTransaction();
+
+    return res.status(200).json({
+      success: true,
+      message: "Item return rejected successfully",
+      data: {
+        orderId,
+        itemId,
+        itemStatus: item.itemStatus,
+        orderStatus: order.orderStatus,
+      },
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("Error updating order return reject", error);
+    return res.status(500).json({ success: false, message: error.message });
+  } finally {
+    await session.endSession();
+  }
+};
+
 //     refundId: `razorpay_wallet_refund_${Date.now()}_${
 //       order._id
 //     }_${Math.random().toString(36).substring(2, 7)}`,
