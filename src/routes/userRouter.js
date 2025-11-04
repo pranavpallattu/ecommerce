@@ -41,6 +41,7 @@ userRouter.post("/orders",userAuthMiddleware,orderController.placeOrder)
 
 userRouter.get("/orders",userAuthMiddleware,orderController.getUserOrders)
 userRouter.get("/order/:orderId",userAuthMiddleware,orderController.getSingleOrder)
+userRouter.post("/orders/return/request/:orderId",userAuthMiddleware,orderController.orderReturn)
 
 
 

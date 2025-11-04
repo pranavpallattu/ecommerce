@@ -29,5 +29,7 @@ adminRouter.get("/admin/orders",adminAuthMiddleware,orderController.listOrders)
 
 adminRouter.get("/admin/orders/:orderId",adminAuthMiddleware,orderController.viewOrder);
 adminRouter.post("/admin/orders/:orderId",adminAuthMiddleware,orderController.orderStatus);
+adminRouter.post("/admin/orders/return/approve/:orderId",adminAuthMiddleware,orderController.orderReturnApprove);
+
 
 module.exports=adminRouter

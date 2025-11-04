@@ -20,7 +20,6 @@ const allowedItemStatuses = [
 
 const CANCELLABLE_STATUSES = ["Processing", "Shipped"];
 
-
 // remove abort transactions and only give it in catch block as we cant abort a transaction twice
 
 exports.placeOrder = async (req, res) => {
@@ -30,7 +29,6 @@ exports.placeOrder = async (req, res) => {
     const { paymentMethod, address, couponId, couponCode } = req.body;
     console.log(paymentMethod);
     const user = req.user;
-    
 
     // validate payment method
     if (!["cod", "wallet"].includes(paymentMethod)) {
@@ -46,8 +44,6 @@ exports.placeOrder = async (req, res) => {
     if (!cart || cart.items.length === 0) {
       throw new Error("Cart is empty");
     }
-
-    
 
     const subTotal = cart.items.reduce(
       (sum, item) => sum + item.price * item.quantity,
@@ -76,10 +72,9 @@ exports.placeOrder = async (req, res) => {
       await wallet.save({ session });
     }
 
-    
     // stock deduction
     for (const item of cart.items) {
-      const product = await Product.findById(item.product).session(session);      
+      const product = await Product.findById(item.product).session(session);
       if (!product || product.quantity < item.quantity) {
         throw new Error(`Low stock: ${item.productName}`);
       }
@@ -88,7 +83,7 @@ exports.placeOrder = async (req, res) => {
       await product.save({ session });
     }
 
-    await cart.populate("items.product")
+    await cart.populate("items.product");
 
     const order = new Order({
       userId: user._id,
@@ -684,6 +679,9 @@ exports.orderReturn = async (req, res) => {
       });
     }
 
+    for (const item of order.items) {
+      item.itemStatus = "ReturnPending";
+    }
     order.orderStatus = "ReturnPending";
     order.returnedReason = reason;
 
@@ -746,26 +744,22 @@ exports.itemReturn = async (req, res) => {
     }
 
     if (["Returned", "ReturnPending"].includes(item.itemStatus)) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Item already returned or return is pending",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Item already returned or return is pending",
+      });
     }
 
     if (item.itemStatus !== "Delivered") {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "Only delivered items can be returned",
-        });
+      return res.status(400).json({
+        success: false,
+        message: "Only delivered items can be returned",
+      });
     }
 
     item.itemStatus = "ReturnPending";
     item.returnReason = reason;
-    item.returnRequestedAt= new Date();
+    item.returnRequestedAt = new Date();
 
     // Save order
     await order.save();
@@ -780,7 +774,7 @@ exports.itemReturn = async (req, res) => {
       },
     });
   } catch (error) {
-      console.error("Return item error:", error);
+    console.error("Return item error:", error);
     return res.status(500).json({
       success: false,
       message: error.message || "Failed to process item return",
