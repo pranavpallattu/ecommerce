@@ -453,6 +453,7 @@ exports.orderReturnApprove = async (req, res) => {
           refundId: `wallet_refund_${Date.now()}_${order._id}`,
           amount: walletRefund,
           itemIds: order.items.map((i) => i._id),
+          reason: reason.trim() || "Order cancellation",
           status: "Processed",
         };
         refundAmount += walletRefund;
@@ -646,10 +647,8 @@ exports.itemReturnReject = async (req, res) => {
 
     // update item status
 
-    item.itemStatus="ReturnRejected"
-    item.returnApprovedAt=new Date();
-
-
+    item.itemStatus = "ReturnRejected";
+    item.returnApprovedAt = new Date();
 
     await order.save({ session });
     await session.commitTransaction();
@@ -667,6 +666,195 @@ exports.itemReturnReject = async (req, res) => {
   } catch (error) {
     await session.abortTransaction();
     console.error("Error updating order return reject", error);
+    return res.status(500).json({ success: false, message: error.message });
+  } finally {
+    await session.endSession();
+  }
+};
+
+exports.itemReturnApprove = async (req, res) => {
+  const session = await mongoose.startSession();
+  await session.startTransaction();
+  try {
+    const { orderId, itemId } = req.params;
+
+    // validate IDs
+    if (
+      !mongoose.Types.ObjectId.isValid(orderId) ||
+      !mongoose.Types.ObjectId.isValid(itemId)
+    ) {
+      await session.abortTransaction();
+      await session.endSession();
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid orderId or itemId" });
+    }
+
+    //find order
+    const order = await Order.findById(orderId).session(session);
+    if (!order) {
+      await session.abortTransaction();
+      await session.endSession();
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
+    }
+
+    // find the specific orer
+    const item = order.items.id(itemId);
+    if (!item) {
+      await session.abortTransaction();
+      await session.endSession();
+      return res.status(404).json({
+        success: false,
+        message: "Item not found",
+      });
+    }
+
+    // validation
+
+    if (item.itemStatus === "Returned") {
+      await session.abortTransaction();
+      await session.endSession();
+      return res.status(409).json({
+        success: false,
+        message: "Item already in Returned state",
+      });
+    }
+
+    if (item.itemStatus !== "ReturnPending") {
+      await session.abortTransaction();
+      await session.endSession();
+      return res.status(409).json({
+        success: false,
+        message: "Only items in Return Pending state can be rejected",
+      });
+    }
+
+    item.itemStatus = "Returned";
+    item.returnApprovedAt = new Date();
+
+    for (const item of order.items) {
+      const product = await Product.findById(item.productId).session(session);
+      if (!product) {
+        throw new Error(`Product not found: ${item.productId}`);
+      }
+      product.quantity += item.quantity;
+      await product.save({ session });
+    }
+
+    let refundAmount = 0;
+    let refundRecord = null;
+
+    // 7. === CANCELLATION: RESTORE STOCK + REFUND ===
+    // Calculate max refundable
+
+    const totalProcessed = order.refunds
+      .filter((refundRecord) => refundRecord.status === "Processed")
+      .reduce((sum, refundRecord) => sum + refundRecord.amount, 0);
+
+    const maxRefundableAmount = order.grandTotal - totalProcessed;
+
+    // wallet refund
+    if (order.paymentMethod === "wallet" && order.walletAmountUsed > 0) {
+      const walletRefund = Math.min(
+        maxRefundableAmount,
+        order.walletAmountUsed
+      );
+
+      if (walletRefund > 0) {
+        await Wallet.findOneAndUpdate(
+          {
+            userId: order.userId,
+          },
+          {
+            $inc: { balance: walletRefund },
+            $push: {
+              transactionHistory: {
+                type: "credit",
+                amount: walletRefund,
+                description: `Refund for Returned item #${item._id}`,
+              },
+            },
+          },
+          { upsert: true, new: true, session }
+        );
+
+        refundRecord = {
+          refundId: `wallet_refund_${Date.now()}_${item._id}`,
+          amount: walletRefund,
+          itemIds: [itemId],
+          status: "Processed",
+        };
+        refundAmount += walletRefund;
+      }
+    }
+
+    // handle razorpay refund  to wallet
+
+    if (order.paymentMethod === "razorpay" && order.grandTotal > 0) {
+      let razorpayRefund = Math.min(maxRefundableAmount, order.grandTotal);
+
+      if (razorpayRefund > 0) {
+        await Wallet.findOneAndUpdate(
+          { userId: order.userId },
+          {
+            $inc: { balance: razorpayRefund },
+            $push: {
+              transactionHistory: {
+                type: "credit",
+                amount: razorpayRefund,
+                description: `Refund for Returned item #${item._id}`,
+              },
+            },
+          },
+          { upsert: true, new: true, session }
+        );
+      }
+      refundRecord = {
+        refundId: `razorpay_refund_${Date.now()}_${item._id}`,
+        amount: razorpayRefund,
+        itemIds: [itemId],
+        status: "Processed",
+      };
+      refundAmount += razorpayRefund;
+    }
+
+    // push refundRecord
+
+    if (refundRecord) {
+      const exists = order.refunds.some(
+        (r) => r.refundId === refundRecord.refundId
+      );
+      if (!exists) order.refunds.push(refundRecord);
+    }
+
+    // update payment status
+    const totalPaid = order.paymentMethod === "cod" ? 0 : order.grandTotal;
+    const totalRefunded = refundRecord?.amount || 0;
+
+    // save
+    await order.save({ session });
+    await session.commitTransaction();
+
+    // 10. Success
+    return res.status(200).json({
+      success: true,
+      message: `item Return approved successfully`,
+      data: {
+        orderId: order._id,
+        itemId,
+        itemStatus: item.itemStatus,
+        orderStatus: order.orderStatus,
+        deliveredAt: order.deliveredAt || null,
+        refundAmount: refundAmount > 0 ? Number(refundAmount.toFixed(2)) : null,
+        refundedTo: refundAmount > 0 ? "wallet" : null,
+      },
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    console.error("Error updating item return approve", error);
     return res.status(500).json({ success: false, message: error.message });
   } finally {
     await session.endSession();

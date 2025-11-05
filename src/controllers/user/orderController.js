@@ -4,6 +4,7 @@ const Cart = require("../../models/cartSchema");
 const Wallet = require("../../models/walletSchema");
 const Product = require("../../models/productSchema");
 const Coupon = require("../../models/couponSchema");
+const crypto = require("crypto");
 
 // At the top of your controller
 const allowedItemStatuses = [
@@ -18,7 +19,7 @@ const allowedItemStatuses = [
   "ReturnRejected",
 ];
 
-const CANCELLABLE_STATUSES = ["Processing", "Shipped"];
+const CANCELLABLE_STATUSES = ["Pending", "Processing", "Shipped"];
 
 // remove abort transactions and only give it in catch block as we cant abort a transaction twice
 
@@ -195,11 +196,18 @@ exports.orderCancel = async (req, res) => {
 
     // validate Id
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
-      await session.abortTransaction();
-      return res.status(400).json({
-        success: false,
-        message: "Invalid order ID",
-      });
+      const err = new Error("Invalid order ID");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // Add validation early
+    if (reason && reason.length > 500) {
+      const err = new Error(
+        "Cancellation reason too long (max 500 characters)"
+      );
+      err.statusCode = 400;
+      throw err;
     }
 
     //  find order
@@ -209,11 +217,16 @@ exports.orderCancel = async (req, res) => {
     }).session(session);
 
     if (!order) {
-      await session.abortTransaction();
-      return res.status(404).json({
-        success: false,
-        message: "Order not found",
-      });
+      const err = new Error("Order not found");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // After finding order
+    if (!order.items || order.items.length === 0) {
+      const err = new Error("Order has no items to cancel");
+      err.statusCode = 400;
+      throw err;
     }
 
     // Check if order-level cancellation is allowed
@@ -227,37 +240,38 @@ exports.orderCancel = async (req, res) => {
         ReturnRejected: "Return rejected.",
       };
 
-      await session.abortTransaction();
-      return res.status(400).json({
-        success: false,
-        message:
-          statusMsg[order.orderStatus] ||
-          `Cannot cancel order in ${order.orderStatus} status`,
-      });
-    }
-
-    if (order.orderStatus === "Cancelled") {
-      await session.abortTransaction();
-      return res
-        .status(400)
-        .json({ success: false, message: "Order already cancelled" });
+      const err = new Error(
+        statusMsg[order.orderStatus] ||
+          `Cannot cancel order in ${order.orderStatus} status`
+      );
+      err.statusCode = 400;
+      throw err;
     }
 
     // update order
 
     order.orderStatus = "Cancelled";
     order.cancelledAt = new Date();
-    order.cancelledReason = reason || "User requested cancellation";
+    order.cancelledReason = reason?.trim() || "User requested cancellation";
+    order.items.forEach((item) => {
+      item.itemStatus = "Cancelled";
+      item.cancelledAt = new Date();
+    });
 
     // Restore stock
 
-    for (const item of order.items) {
-      const product = await Product.findById(item.product).session(session);
-      if (product) {
+    await Promise.all(
+      order.items.map(async (item) => {
+        const product = await Product.findById(item.productId).session(session);
+        if (!product) {
+          const err = new Error(`Product not found: ${item.productId}`);
+          err.statusCode = 404;
+          throw err;
+        }
         product.quantity += item.quantity;
         await product.save({ session });
-      }
-    }
+      })
+    );
 
     // maxrefundable amount for safety to prevent double refund money
     const totalProcessed = order.refunds
@@ -269,92 +283,58 @@ exports.orderCancel = async (req, res) => {
     let refundAmount = 0;
     let refundRecord = null;
 
-    // Handle wallet refund (immediate)
-    if (order.paymentMethod === "wallet" && order.walletAmountUsed > 0) {
-      refundAmount = Math.min(maxRefundable, order.walletAmountUsed);
-
-      let wallet = await Wallet.findOne({ userId: user._id }).session(session);
-      if (!wallet) {
-        wallet = new Wallet({
-          userId: user._id,
-          balance: 0,
-          transactionHistory: [],
-        });
-      }
-      wallet.balance += refundAmount;
-      wallet.transactionHistory.push({
-        type: "credit",
-        amount: refundAmount,
-        description: `Refund for cancelled order #${order._id}`,
-      });
-
-      await wallet.save({ session });
-
-      // Add refund record
-
-      refundRecord = {
-        refundId: `wallet_refund_${Date.now()}_${order._id}_${Math.random()
-          .toString(36)
-          .substring(2, 7)}`,
-        amount: refundAmount,
-        itemIds: order.items.map((i) => i._id),
-        status: "Processed",
-      };
-    }
-
-    // handle razorpay refund  to wallet
-
-    if (order.paymentMethod === "razorpay" && order.grandTotal > 0) {
+    if (order.paymentMethod === "cod") {
+      refundAmount = 0;
+      order.paymentStatus = "N/A";
+    } else {
       refundAmount = Math.min(maxRefundable, order.grandTotal);
 
-      let wallet = await Wallet.findOne({ userId: user._id }).session(session);
-      if (!wallet) {
-        wallet = new Wallet({
-          userId: user._id,
-          balance: 0,
-          transactionHistory: [],
-        });
+      if (refundAmount <= 0) {
+        const err = new Error("No refundable amount available");
+        err.statusCode = 404;
+        throw err;
       }
-      wallet.balance += refundAmount;
-      wallet.transactionHistory.push({
-        type: "credit",
-        amount: refundAmount,
-        description: `Refund for cancelled order #${order._id}`,
-      });
 
-      await wallet.save({ session });
+      const walletUpdate = await Wallet.findOneAndUpdate(
+        { userId: user._id },
+        {
+          $inc: { balance: refundAmount },
+          $push: {
+            transactionHistory: {
+              type: "credit",
+              amount: refundAmount,
+              description: `Refund for Cancelled order #${order._id}`,
+            },
+          },
+        },
+        { upsert: true, new: true, session }
+      );
 
-      // refund record
+      if (!walletUpdate) {
+        throw new Error("Failed to update wallet balance");
+      }
+
       refundRecord = {
-        refundId: `razorpay_wallet_refund_${Date.now()}_${
-          order._id
-        }_${Math.random().toString(36).substring(2, 7)}`,
+        refundId: `refund_${crypto.randomUUID()}`,
         amount: refundAmount,
         itemIds: order.items.map((i) => i._id),
         status: "Processed",
       };
+
+      order.refunds.push(refundRecord);
     }
 
-    const totalPaid =
-      order.paymentMethod === "cod" ? 0 : order.grandTotal + totalProcessed;
-    const totalRefunded = totalProcessed + (refundRecord?.amount || 0);
+    const totalPaid = order.grandTotal;
+    const totalRefunded = order.refunds
+      .filter((r) => r.status === "Processed")
+      .reduce((sum, r) => sum + r.amount, 0);
 
-    if (totalPaid > 0 && totalRefunded >= totalPaid) {
+    if (totalRefunded >= totalPaid) {
       order.paymentStatus = "Refunded";
     } else if (totalRefunded > 0) {
       order.paymentStatus = "PartiallyRefunded";
-    } else if (order.paymentMethod === "cod") {
-      order.paymentStatus = "N/A";
     }
-    // update refund record
 
-    if (refundRecord) {
-      // avoid duplicate push if refundId already exists
-      const exists = order.refunds.some(
-        (r) => r.refundId === refundRecord.refundId
-      );
-      if (!exists) order.refunds.push(refundRecord);
-    }
     // save order
     await order.save({ session });
 
@@ -370,17 +350,20 @@ exports.orderCancel = async (req, res) => {
         refundAmount: refundAmount > 0 ? Number(refundAmount.toFixed(2)) : null,
         refundedTo: refundAmount > 0 ? "wallet" : null,
         refundId: refundRecord?.refundId || null,
+        paymentStatus: order.paymentStatus,
+        totalRefunded: totalRefunded,
       },
     });
   } catch (error) {
     await session.abortTransaction();
     console.error("orderCancel error:", error);
-    return res.status(500).json({
+    const status = error.statusCode || 500;
+    return res.status(status).json({
       success: false,
       message: error.message || "Failed to cancel order",
     });
   } finally {
-    session.endSession();
+    await session.endSession();
   }
 };
 
@@ -455,7 +438,7 @@ exports.cancelSingleItem = async (req, res) => {
     item.cancellationReason = reason || "User requested cancellation";
 
     // Restore stock
-    const product = await Product.findById(item.product).session(session);
+    const product = await Product.findById(item.productId).session(session);
     if (product) {
       product.quantity += item.quantity;
       await product.save({ session });

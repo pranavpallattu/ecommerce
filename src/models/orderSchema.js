@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const transactionStatuses = [
-  "Pending",
+  "Pending", // ✅ ADD BACK - Order placed, awaiting payment/confirmation
+  "Confirmed",
   "Processing",
   "Shipped",
   "Delivered",
@@ -42,9 +43,10 @@ const orderSchema = new mongoose.Schema(
         itemStatus: {
           type: String,
           enum: transactionStatuses,
-          default: "Processing",
+          default: "Pending",
         },
         deliveredAt: { type: Date, default: null },
+        cancelledAt: { type: Date, default: null },
         cancellationReason: { type: String, default: null },
         returnReason: { type: String, default: null },
         returnRequestedAt: { type: Date, default: null },
@@ -93,14 +95,15 @@ const orderSchema = new mongoose.Schema(
     orderStatus: {
       type: String,
       enum: transactionStatuses,
-      default: "Processing",
+      default: "Pending",
     },
     refunds: [
       {
         refundId: { type: String, required: true },
         amount: { type: Number, required: true, min: 0 },
         itemIds: [{ type: mongoose.Schema.Types.ObjectId }], // References items._id
-        date: { type: Date, default: () => Date.now() },
+        reason: { type: String, default: null },
+        date: { type: Date, default: Date.now },
         status: {
           type: String,
           enum: ["Initiated", "Processed", "Failed"],
@@ -125,10 +128,8 @@ orderSchema.pre("save", function (next) {
     }
   });
   this.subTotal = this.items.reduce((sum, i) => sum + i.subtotal, 0);
-  const totalRefunded = this.refunds
-    .filter((r) => r.status === "Processed")
-    .reduce((sum, r) => sum + r.amount, 0);
-  this.grandTotal = Math.max(0, this.subTotal - this.discount - totalRefunded);
+
+  this.grandTotal = Math.max(0, this.subTotal - this.discount);
   next();
 });
 
