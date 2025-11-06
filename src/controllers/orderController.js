@@ -3,6 +3,7 @@ const Order = require("../models/orderSchema");
 const Product = require("../models/productSchema");
 const User = require("../models/userSchema");
 const Wallet = require("../models/walletSchema");
+const crypto = require("crypto");
 
 exports.listOrders = async (req, res) => {
   try {
@@ -327,76 +328,63 @@ exports.orderReturnApprove = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
-  const NON_RETURNABLE_ITEM_STATUSES = [
-    "Cancelled",
-    "Returned",
-    "ReturnRejected",
-  ];
+  // const NON_RETURNABLE_ITEM_STATUSES = [
+  //   "Cancelled",
+  //   "Returned",
+  //   "ReturnRejected",
+  // ];
 
   try {
     const { orderId } = req.params;
 
+    // validate orderId
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
-      await session.abortTransaction();
-      await session.endSession();
-      return res
-        .status(400)
-        .json({ success: false, message: "OrderId is not valid" });
+      const err = new Error("OrderId is not valid");
+      err.statusCode = 400;
+      throw err;
     }
 
     // find order
-
     const order = await Order.findById(orderId).session(session);
     if (!order) {
-      await session.abortTransaction();
-      await session.endSession();
-      return res
-        .status(404)
-        .json({ success: false, message: "Order not found" });
+      const err = new Error("Order not found");
+      err.statusCode = 404;
+      throw err;
     }
 
+    // check is order already returned
     if (order.orderStatus == "Returned") {
-      await session.abortTransaction();
-      await session.endSession();
-      return res.status(409).json({
-        success: false,
-        message: "Order already returned",
-      });
+      const err = new Error("Order already returned");
+      err.statusCode = 409;
+      throw err;
     }
 
+    // check if order is in return pending state
     if (order.orderStatus !== "ReturnPending") {
-      await session.abortTransaction();
-      await session.endSession();
-      return res.status(404).json({
-        success: false,
-        message: "Order not in return pending state",
-      });
+      const err = new Error("Order not in return pending state");
+      err.statusCode = 400;
+      throw err;
     }
-
-    // === RESTORE STOCK & UPDATE ITEMS ==
 
     // Pre-check all items BEFORE restore
+    // Validate all items are in ReturnPending status
     for (const item of order.items) {
-      if (NON_RETURNABLE_ITEM_STATUSES.includes(item.itemStatus)) {
-        await session.abortTransaction();
-        await session.endSession();
-        return res.status(400).json({
-          success: false,
-          message: `Item ${item.productId} cannot be Returned in its current status ${item.itemStatus}`,
-        });
+      if (item.itemStatus !== "ReturnPending") {
+        const err = new Error(
+          `Item ${item.productId} is not in ReturnPending status (current: ${item.itemStatus})`
+        );
+        err.statusCode = 400;
+        throw err;
       }
     }
 
-    // Then restore
+    // Then restore items
     for (const item of order.items) {
       const product = await Product.findById(item.productId).session(session);
       if (!product) {
-        await session.abortTransaction();
-        await session.endSession();
-        return res.status(404).json({
-          success: false,
-          message: `Product not found for item ${item.productId}`,
-        });
+        const err = new Error(`Product not found for item ${item.productId}`);
+        err.statusCode = 404;
+        throw err;
       }
       product.quantity += item.quantity;
       await product.save({ session });
@@ -405,6 +393,7 @@ exports.orderReturnApprove = async (req, res) => {
     // order status
     order.orderStatus = "Returned";
 
+    // item status
     for (const item of order.items) {
       if (item.itemStatus === "ReturnPending") {
         item.itemStatus = "Returned";
@@ -412,96 +401,59 @@ exports.orderReturnApprove = async (req, res) => {
       }
     }
 
-    let refundAmount = 0;
-    let refundRecord = null;
-
-    // 7. === CANCELLATION: RESTORE STOCK + REFUND ===
-    // Calculate max refundable
-
+    // calculate totalRefunded before refund
     const totalProcessed = order.refunds
       .filter((refundRecord) => refundRecord.status === "Processed")
       .reduce((sum, refundRecord) => sum + refundRecord.amount, 0);
 
+    // maximum refundable amount
     const maxRefundableAmount = order.grandTotal - totalProcessed;
 
+    let refundAmount = 0;
+    let refundRecord = null;
+
     // wallet refund
-    if (order.paymentMethod === "wallet" && order.walletAmountUsed > 0) {
-      const walletRefund = Math.min(
-        maxRefundableAmount,
-        order.walletAmountUsed
+    if (order.paymentMethod === "cod") {
+      refundAmount = 0;
+    } else {
+      refundAmount = Math.min(maxRefundableAmount, order.grandTotal);
+
+      const walletUpdate = await Wallet.findOneAndUpdate(
+        {
+          userId: order.userId,
+        },
+        {
+          $inc: { balance: refundAmount },
+          $push: {
+            transactionHistory: {
+              type: "credit",
+              amount: refundAmount,
+              description: `Refund for Returned order #${order._id}`,
+            },
+          },
+        },
+        { upsert: true, new: true, session }
       );
 
-      if (walletRefund > 0) {
-        await Wallet.findOneAndUpdate(
-          {
-            userId: order.userId,
-          },
-          {
-            $inc: { balance: walletRefund },
-            $push: {
-              transactionHistory: {
-                type: "credit",
-                amount: walletRefund,
-                description: `Refund for Returned order #${order._id}`,
-              },
-            },
-          },
-          { upsert: true, new: true, session }
-        );
-
-        refundRecord = {
-          refundId: `wallet_refund_${Date.now()}_${order._id}`,
-          amount: walletRefund,
-          itemIds: order.items.map((i) => i._id),
-          reason: reason.trim() || "Order cancellation",
-          status: "Processed",
-        };
-        refundAmount += walletRefund;
+      if (!walletUpdate) {
+        throw new Error("Failed to update wallet balance");
       }
-    }
 
-    // handle razorpay refund  to wallet
-
-    if (order.paymentMethod === "razorpay" && order.grandTotal > 0) {
-      let razorpayRefund = Math.min(maxRefundableAmount, order.grandTotal);
-
-      if (razorpayRefund > 0) {
-        await Wallet.findOneAndUpdate(
-          { userId: order.userId },
-          {
-            $inc: { balance: razorpayRefund },
-            $push: {
-              transactionHistory: {
-                type: "credit",
-                amount: razorpayRefund,
-                description: `Refund for Returned order #${order._id}`,
-              },
-            },
-          },
-          { upsert: true, new: true, session }
-        );
-      }
       refundRecord = {
-        refundId: `razorpay_refund_${Date.now()}_${order._id}`,
-        amount: razorpayRefund,
+        refundId: `refund_${crypto.randomUUID()}`,
+        amount: refundAmount,
         itemIds: order.items.map((i) => i._id),
+        reason: order.returnedReason,
         status: "Processed",
       };
-      refundAmount += razorpayRefund;
+      order.refunds.push(refundRecord);
     }
 
-    // push refundRecord
-
-    if (refundRecord) {
-      const exists = order.refunds.some(
-        (r) => r.refundId === refundRecord.refundId
-      );
-      if (!exists) order.refunds.push(refundRecord);
-    }
-
-    // update payment status
+    // update payment status after refund
     const totalPaid = order.paymentMethod === "cod" ? 0 : order.grandTotal;
-    const totalRefunded = refundRecord?.amount || 0;
+    const totalRefunded = order.refunds
+      .filter((r) => r.status === "Processed")
+      .reduce((sum, r) => sum + r.amount, 0);
 
     if (order.paymentMethod === "cod") {
       order.paymentStatus = "Refunded";
@@ -522,6 +474,7 @@ exports.orderReturnApprove = async (req, res) => {
       data: {
         orderId: order._id,
         orderStatus: order.orderStatus,
+        paymentStatus: order.paymentStatus,
         deliveredAt: order.deliveredAt || null,
         refundAmount: refundAmount > 0 ? Number(refundAmount.toFixed(2)) : null,
         refundedTo: refundAmount > 0 ? "wallet" : null,
@@ -530,7 +483,8 @@ exports.orderReturnApprove = async (req, res) => {
   } catch (error) {
     await session.abortTransaction();
     console.error("Error updating order return approve", error);
-    return res.status(500).json({ success: false, message: error.message });
+    const status = error.statusCode || 500;
+    return res.status(status).json({ success: false, message: error.message });
   } finally {
     await session.endSession();
   }
