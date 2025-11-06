@@ -6,26 +6,11 @@ const Product = require("../../models/productSchema");
 const Coupon = require("../../models/couponSchema");
 const crypto = require("crypto");
 
-// At the top of your controller
-const allowedItemStatuses = [
-  "Processing",
-  "Shipped",
-  "Delivered",
-  "Cancelled",
-  "Returned",
-  "ReturnPending",
-  "PartiallyReturned",
-  "PartiallyCancelled",
-  "ReturnRejected",
-];
-
 const CANCELLABLE_STATUSES = ["Pending", "Confirmed", "Processing"];
-
-// remove abort transactions and only give it in catch block as we cant abort a transaction twice
 
 exports.placeOrder = async (req, res) => {
   const session = await mongoose.startSession();
-  session.startTransaction();
+  await session.startTransaction();
   try {
     const { paymentMethod, address, couponId, couponCode } = req.body;
     console.log(paymentMethod);
@@ -33,24 +18,93 @@ exports.placeOrder = async (req, res) => {
 
     // validate payment method
     if (!["cod", "wallet"].includes(paymentMethod)) {
-      throw new Error("Invalid payment method");
+      const err = new Error("Invalid payment method");
+      err.statusCode = 400;
+      throw err;
     }
 
+    // validate address
     if (!address?.addressId || !address?.snapshot) {
-      throw new Error("Address is required");
+      const err = new Error("Address is required");
+      err.statusCode = 422;
+      throw err;
     }
 
     // validate cart
     const cart = await Cart.findOne({ userId: user._id }).session(session);
     if (!cart || cart.items.length === 0) {
-      throw new Error("Cart is empty");
+      const err = new Error("Cart is empty");
+      err.statusCode = 409;
+      throw err;
     }
 
     const subTotal = cart.items.reduce(
       (sum, item) => sum + item.price * item.quantity,
       0
     );
-    const discount = 0;
+    let discount = 0;
+    let validCouponId = null;
+    let validCouponCode = null;
+
+    if (couponId) {
+      const coupon = await Coupon.findById(couponId).session(session);
+
+      if (!coupon) {
+        const err = new Error("Invalid coupon");
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // Check if coupon is active
+      if (!coupon.isActive) {
+        const err = new Error("Coupon is not active");
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // Check expiry
+      if (coupon.expiryDate && new Date(coupon.expiryDate) < new Date()) {
+        const err = new Error("Coupon has expired");
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // Check minimum purchase
+      if (subTotal < coupon.minPurchase) {
+        const err = new Error(
+          `Minimum purchase of ₹${coupon.minPurchase} required to use this coupon`
+        );
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // Check usage limit (if applicable)
+      if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
+        const err = new Error("Coupon usage limit exceeded");
+        err.statusCode = 400;
+        throw err;
+      }
+
+      // Calculate discount
+      if (coupon.discountType === "percentage") {
+        discount = (subTotal * coupon.discount) / 100;
+      } else if (coupon.discountType === "flat") {
+        discount = coupon.discount;
+      }
+
+      // Ensure discount doesn't exceed subtotal
+      discount = Math.min(discount, subTotal);
+
+      validCouponId = coupon._id;
+      validCouponCode = coupon.code;
+
+      // // Increment usage count
+      // coupon.usedCount = (coupon.usedCount || 0) + 1;
+      // user.usedCoupons.push(validCouponId);
+      // await coupon.save({ session });
+      // await user.save({session})
+    }
+
     const grandTotal = subTotal - discount;
 
     let walletUsed = 0;
@@ -60,9 +114,10 @@ exports.placeOrder = async (req, res) => {
         session
       );
       if (!wallet || wallet.balance < grandTotal) {
-        throw new Error("Insufficient wallet balance");
+        const err = new Error("Insufficient wallet balance");
+        err.statusCode = 402;
+        throw err;
       }
-
       wallet.balance -= grandTotal;
       walletUsed = grandTotal;
       wallet.transactionHistory.push({
@@ -73,15 +128,30 @@ exports.placeOrder = async (req, res) => {
       await wallet.save({ session });
     }
 
-    // stock deduction
+    // Step 1: Validate ALL products first
     for (const item of cart.items) {
       const product = await Product.findById(item.productId).session(session);
-      if (!product || product.quantity < item.quantity) {
-        throw new Error(`Low stock: ${item.productName}`);
+      if (!product) {
+        const err = new Error(`Product not found: ${item.productName}`);
+        err.statusCode = 404;
+        throw err;
       }
+      if (product.quantity < item.quantity) {
+        const err = new Error(
+          `Insufficient stock for ${item.productName}. Only ${product.quantity} available.`
+        );
+        err.statusCode = 409;
+        throw err;gi
+      }
+    }
 
-      product.quantity -= item.quantity;
-      await product.save({ session });
+    // Step 2: Deduct stock for ALL products (after validation)
+    for (const item of cart.items) {
+      await Product.findByIdAndUpdate(
+        item.product,
+        { $inc: { quantity: -item.quantity } },
+        { session }
+      );
     }
 
     await cart.populate("items.product");
@@ -124,7 +194,8 @@ exports.placeOrder = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
-    return res.status(500).json({ success: false, message: error.message });
+    const status = error.statusCode || 500;
+    return res.status(status).json({ success: false, message: error.message });
   } finally {
     session.endSession();
   }
@@ -166,6 +237,7 @@ exports.getSingleOrder = async (req, res) => {
       });
     }
 
+    // find order
     const order = await Order.findOne({ _id: orderId, userId: user._id })
       .populate("items.productId")
       .lean();
@@ -511,7 +583,7 @@ exports.cancelSingleItem = async (req, res) => {
       refundRecord = null;
     }
     // Add refund amount to wallet for both wallet and razorpay payment
-    else if (order.paymentMethod === "wallet") {
+    else {
       await Wallet.findOneAndUpdate(
         { userId: user._id },
         {
@@ -612,12 +684,14 @@ exports.orderReturn = async (req, res) => {
       });
     }
 
+    // validate reason
     if (!reason || reason.trim().length === 0) {
       return res
         .status(400)
         .json({ success: false, message: "Return reason cannot be empty" });
     }
 
+    // find order
     const order = await Order.findOne({
       _id: orderId,
       userId: user._id,
@@ -630,6 +704,7 @@ exports.orderReturn = async (req, res) => {
       });
     }
 
+    // check if order status is not delivered
     if (order.orderStatus !== "Delivered") {
       return res.status(400).json({
         success: false,
@@ -637,6 +712,7 @@ exports.orderReturn = async (req, res) => {
       });
     }
 
+    // check is order already in returned or return pending state
     if (["Returned", "ReturnPending"].includes(order.orderStatus)) {
       return res.status(400).json({
         success: false,
@@ -644,8 +720,10 @@ exports.orderReturn = async (req, res) => {
       });
     }
 
+    // update item and order status
     for (const item of order.items) {
       item.itemStatus = "ReturnPending";
+      item.returnRequestedAt = new Date();
     }
     order.orderStatus = "ReturnPending";
     order.returnedReason = reason;
@@ -674,6 +752,7 @@ exports.itemReturn = async (req, res) => {
     const { reason } = req.body;
     const user = req.user;
 
+    // validate orderId and itemId
     if (
       !mongoose.Types.ObjectId.isValid(orderId) ||
       !mongoose.Types.ObjectId.isValid(itemId)
@@ -683,12 +762,14 @@ exports.itemReturn = async (req, res) => {
         .json({ success: false, message: "Invalid order or item id" });
     }
 
+    // validate reason
     if (!reason || reason.trim().length === 0) {
       return res
         .status(400)
         .json({ success: false, message: "Return reason cannot be empty" });
     }
 
+    // find order
     const order = await Order.findOne({
       _id: orderId,
       userId: user._id,
@@ -701,6 +782,7 @@ exports.itemReturn = async (req, res) => {
       });
     }
 
+    // find item
     const item = order.items.id(itemId);
     if (!item) {
       return res
@@ -708,13 +790,7 @@ exports.itemReturn = async (req, res) => {
         .json({ success: false, message: "Item not found in order" });
     }
 
-    if (["Returned", "ReturnPending"].includes(item.itemStatus)) {
-      return res.status(400).json({
-        success: false,
-        message: "Item already returned or return is pending",
-      });
-    }
-
+    // check is item status not delivered
     if (item.itemStatus !== "Delivered") {
       return res.status(400).json({
         success: false,
@@ -722,6 +798,15 @@ exports.itemReturn = async (req, res) => {
       });
     }
 
+    // check is itemstatus is already returned or in return pending state
+    if (["Returned", "ReturnPending"].includes(item.itemStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Item already returned or return is pending",
+      });
+    }
+
+    // update item status
     item.itemStatus = "ReturnPending";
     item.returnReason = reason;
     item.returnRequestedAt = new Date();
