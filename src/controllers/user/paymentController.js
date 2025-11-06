@@ -5,6 +5,7 @@ const Cart = require("../../models/cartSchema");
 const { default: mongoose } = require("mongoose");
 const Product = require("../../models/productSchema");
 const Wallet = require("../../models/walletSchema");
+const Coupon = require("../../models/couponSchema");
 
 exports.createOrder = async (req, res) => {
   try {
@@ -42,7 +43,8 @@ exports.createOrder = async (req, res) => {
 
 exports.verifyPayment = async (req, res) => {
   const session = await mongoose.startSession();
-  session.startTransaction();
+  await session.startTransaction();
+  let order;
   try {
     const {
       razorpay_order_id,
@@ -60,11 +62,9 @@ exports.verifyPayment = async (req, res) => {
       .digest("hex");
 
     if (generatedSignature !== razorpay_signature) {
-      await session.abortTransaction();
-      await session.endSession();
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid signature payment failed" });
+      const err = new Error("Invalid signature, payment failed");
+      err.statusCode = 400;
+      throw err;
     }
 
     // prevent duplicate order
@@ -72,24 +72,21 @@ exports.verifyPayment = async (req, res) => {
       razorpayOrderId: razorpay_order_id,
     });
     if (existingOrder) {
-      await session.abortTransaction();
-      await session.endSession();
+      await session.commitTransaction();
       return res.status(200).json({
         success: true,
-        message: "Order Already processed",
+        message: "Order already processed",
         data: { orderId: existingOrder._id },
       });
     }
 
     // validate cart
-
     const cart = await Cart.findOne({ userId: user._id }).session(session);
 
     if (!cart || cart.items.length === 0) {
-      await session.abortTransaction();
-      session.endSession();
-
-      throw new Error("Cart is empty or not found");
+      const err = new Error("Cart is empty or not found");
+      err.statusCode = 400;
+      throw err;
     }
 
     // validate sub total
@@ -98,16 +95,61 @@ exports.verifyPayment = async (req, res) => {
       (sum, item) => sum + item.price * item.quantity,
       0
     );
-    if (calculatedSubTotal !== orderDetails.subTotal) {
-      await session.abortTransaction();
-      session.endSession();
+    let expectedDiscount = 0;
 
-      throw new Error("Amount tampering detected");
+    if (orderDetails.couponId) {
+      const coupon = await Coupon.findById(orderDetails.couponId).session(
+        session
+      );
+
+      if (!coupon || !coupon.isActive) {
+        const err = new Error("Invalid or inactive coupon");
+        err.statusCode = 400;
+        throw err;
+      }
+
+      if (calculatedSubTotal < coupon.minPurchase) {
+        const err = new Error("Minimum purchase requirement not met");
+        err.statusCode = 400;
+        throw err;
+      }
+
+      if (coupon.discountType == "percentage") {
+        expectedDiscount = (calculatedSubTotal * coupon.discount) / 100;
+      } else if (coupon.discountType == "flat") {
+        expectedDiscount = coupon.discount;
+      }
+
+      expectedDiscount = Math.min(expectedDiscount, calculatedSubTotal);
     }
 
-    //  signature verified
+    const expectedGrandTotal = calculatedSubTotal - expectedDiscount;
+
+    // Validate amounts
+    if (
+      calculatedSubTotal !== orderDetails.subTotal ||
+      expectedDiscount !== orderDetails.discount ||
+      expectedGrandTotal !== orderDetails.grandTotal
+    ) {
+      const err = new Error("Payment amount tampering detected");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // === VALIDATE & DEDUCT STOCK ===
+    for (const item of cart.items) {
+      const product = await Product.findById(item.productId).session(session);
+      if (!product || product.quantity < item.quantity) {
+        const err = new Error(`Insufficient stock for ${item.productName}`);
+        err.statusCode = 400;
+        throw err;
+      }
+      product.quantity -= item.quantity;
+      await product.save({ session });
+    }
+
     // save order
-    const order = new Order({
+    order = new Order({
       userId: user._id,
       items: cart.items.map((item) => ({
         productId: item.productId,
@@ -116,7 +158,7 @@ exports.verifyPayment = async (req, res) => {
         quantity: item.quantity,
         price: item.price,
         subtotal: item.price * item.quantity,
-        itemStatus: "Processing",
+        itemStatus: "Confirmed",
       })),
       address: {
         addressId: orderDetails.address.addressId,
@@ -125,141 +167,183 @@ exports.verifyPayment = async (req, res) => {
       couponId: orderDetails.couponId,
       couponCode: orderDetails.couponCode || null,
       subTotal: calculatedSubTotal, // Align with schema
-      discount: orderDetails.discount || 0,
-      grandTotal: orderDetails.grandTotal, // Align with schema
+      discount: expectedDiscount || 0,
+      grandTotal: expectedGrandTotal, // Align with schema
       paymentMethod: "razorpay",
       razorpayPaymentId: razorpay_payment_id,
       razorpayOrderId: razorpay_order_id,
       paymentStatus: "Paid",
-      orderStatus: "Processing",
+      orderStatus: "Confirmed",
     });
-
-    // deduct stock
-
-    for (const item of cart.items) {
-      const product = await Product.findById(item.productId).session(session);
-      if (!product || product.quantity < item.quantity) {
-        await session.abortTransaction();
-        session.endSession();
-
-        throw new Error(`Insufficient stock for ${item.productName}`);
-      }
-      product.quantity -= item.quantity;
-      await product.save({ session });
-    }
 
     await order.save({ session });
     await Cart.deleteOne({ userId: user._id }).session(session);
 
     await session.commitTransaction();
-    session.endSession();
     return res
       .status(200)
       .json({ success: true, message: "Payment verified & order saved" });
   } catch (error) {
     await session.abortTransaction();
     console.error("verifyPayment error:", error);
-    return res.status(500).json({ success: false, message: error.message ,data:order});
-  }
-  finally{
-    session.endSession();
+    const statusCode = error.statusCode || 500;
+    return res
+      .status(statusCode)
+      .json({ success: false, message: error.message, data: order || null });
+  } finally {
+    await session.endSession();
   }
 };
 
-// exports.refundToWallet = async (
-//   paymentId,
-//   amount,
-//   orderId,
-//   userId,
-//   session
-// ) => {
+// exports.verifyPayment = async (req, res) => {
+//   const session = await mongoose.startSession();
+//   session.startTransaction();
+
 //   try {
-//     // initiate razorpay refund
-//     const razorpayRefund = await razorpayInstance.payments.refund(paymentId, {
-//       amount: Math.round(amount * 100),
-//       speed: "normal",
-//       notes: {
-//         reason: "Order cancelled by user",
-//         orderId: orderId.toString(),
+//     const {
+//       razorpay_order_id,
+//       razorpay_payment_id,
+//       razorpay_signature,
+//       orderDetails,
+//     } = req.body;
+
+//     const user = req.user;
+
+//     // === VALIDATE SIGNATURE ===
+//     const generatedSignature = crypto
+//       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+//       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+//       .digest("hex");
+
+//     if (generatedSignature !== razorpay_signature) {
+//       throw new Error("Invalid signature - payment verification failed");
+//     }
+
+//     // === PREVENT DUPLICATE ORDERS ===
+//     const existingOrder = await Order.findOne({
+//       razorpayOrderId: razorpay_order_id,
+//     }).session(session);
+
+//     if (existingOrder) {
+//       await session.commitTransaction();
+//       return res.status(200).json({
+//         success: true,
+//         message: "Order already processed",
+//         data: { orderId: existingOrder._id },
+//       });
+//     }
+
+//     // === VALIDATE CART ===
+//     const cart = await Cart.findOne({ userId: user._id }).session(session);
+//     if (!cart || cart.items.length === 0) {
+//       throw new Error("Cart is empty or not found");
+//     }
+
+//     // === CALCULATE & VALIDATE AMOUNTS ===
+//     const calculatedSubTotal = cart.items.reduce(
+//       (sum, item) => sum + item.price * item.quantity,
+//       0
+//     );
+
+//     // Validate coupon and calculate discount
+//     let expectedDiscount = 0;
+//     if (orderDetails.couponId) {
+//       const coupon = await Coupon.findById(orderDetails.couponId).session(session);
+
+//       if (!coupon || !coupon.isActive) {
+//         throw new Error("Invalid or inactive coupon");
+//       }
+
+//       if (calculatedSubTotal < coupon.minPurchase) {
+//         throw new Error("Minimum purchase requirement not met");
+//       }
+
+//       if (coupon.discountType === "percentage") {
+//         expectedDiscount = (calculatedSubTotal * coupon.discountValue) / 100;
+//         if (coupon.maxDiscount) {
+//           expectedDiscount = Math.min(expectedDiscount, coupon.maxDiscount);
+//         }
+//       } else if (coupon.discountType === "flat") {
+//         expectedDiscount = coupon.discountValue;
+//       }
+
+//       expectedDiscount = Math.min(expectedDiscount, calculatedSubTotal);
+
+//       // Increment usage count
+//       coupon.usedCount = (coupon.usedCount || 0) + 1;
+//       await coupon.save({ session });
+//     }
+
+//     const expectedGrandTotal = calculatedSubTotal - expectedDiscount;
+
+// // Validate amounts
+// if (
+//   calculatedSubTotal !== orderDetails.subTotal ||
+//   expectedDiscount !== orderDetails.discount ||
+//   expectedGrandTotal !== orderDetails.grandTotal
+// ) {
+//   throw new Error("Payment amount tampering detected");
+// }
+
+// // === VALIDATE & DEDUCT STOCK ===
+// for (const item of cart.items) {
+//   const product = await Product.findById(item.productId).session(session);
+//   if (!product || product.quantity < item.quantity) {
+//     throw new Error(`Insufficient stock for ${item.productName}`);
+//   }
+//   product.quantity -= item.quantity;
+//   await product.save({ session });
+// }
+
+// === CREATE ORDER ===
+//     const order = new Order({
+//       userId: user._id,
+//       items: cart.items.map((item) => ({
+//         productId: item.productId,
+//         productName: item.productName,
+//         productImage: item.productImage,
+//         quantity: item.quantity,
+//         price: item.price,
+//         subtotal: item.price * item.quantity,
+//         itemStatus: "Confirmed", // Payment confirmed
+//       })),
+//       address: {
+//         addressId: orderDetails.address.addressId,
+//         snapshot: orderDetails.address.snapshot,
+//       },
+//       couponId: orderDetails.couponId || null,
+//       couponCode: orderDetails.couponCode || null,
+//       subTotal: calculatedSubTotal,
+//       discount: expectedDiscount,
+//       grandTotal: expectedGrandTotal,
+//       paymentMethod: "razorpay",
+//       razorpayPaymentId: razorpay_payment_id,
+//       razorpayOrderId: razorpay_order_id,
+//       paymentStatus: "Paid",
+//       orderStatus: "Confirmed", // Payment confirmed
+//     });
+
+//     await order.save({ session });
+//     await Cart.deleteOne({ userId: user._id }).session(session);
+
+//     await session.commitTransaction();
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Payment verified & order created",
+//       data: {
+//         orderId: order._id,
+//         grandTotal: order.grandTotal,
 //       },
 //     });
-
-//     console.log(razorpayRefund);
-
-//     // credit amount to users wallet
-//     let wallet = await Wallet.findOne({ userId }).session(session);
-//     if (!wallet) {
-//       wallet = new Wallet({ userId, balance: 0, transactionHistory: [] });
-//     }
-
-//     wallet.balance += amount;
-//     wallet.transactionHistory.push({
-//       type: "credit",
-//       amount,
-//       description: `Refund for cancelled order ${orderId}`,
-//     });
-
-//     await wallet.save({ session });
-
-//     return {
-//       success: true,
-//       refundId: razorpayRefund.id,
-//       amount,
-//       status: "Processed",
-//     };
 //   } catch (error) {
-//     console.error("Razorpay refund failed:", error);
-//     return {
+//     await session.abortTransaction();
+//     console.error("verifyPayment error:", error);
+//     return res.status(500).json({
 //       success: false,
-//       refundId: `failed_${Date.now()}`,
-//       amount,
-//       status: "Failed",
-//       error: error.message,
-//     };
-//   }
-// };
-
-
-
-// exports.refundToWallet = async (
-//   paymentId,
-//   amount,
-//   orderId,
-//   userId,
-//   session
-// ) => {
-//   try {
-    
-
-//     // credit amount to users wallet
-//     let wallet = await Wallet.findOne({ userId }).session(session);
-//     if (!wallet) {
-//       wallet = new Wallet({ userId, balance: 0, transactionHistory: [] });
-//     }
-
-//     wallet.balance += amount;
-//     wallet.transactionHistory.push({
-//       type: "credit",
-//       amount,
-//       description: `Refund for cancelled order ${orderId}`,
+//       message: error.message
 //     });
-
-//     await wallet.save({ session });
-
-//     return {
-//       success: true,
-//       refundId: razorpayRefund.id,
-//       amount,
-//       status: "Processed",
-//     };
-//   } catch (error) {
-//     console.error("Razorpay refund failed:", error);
-//     return {
-//       success: false,
-//       refundId: `failed_${Date.now()}`,
-//       amount,
-//       status: "Failed",
-//       error: error.message,
-//     };
+//   } finally {
+//     session.endSession();
 //   }
 // };

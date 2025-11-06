@@ -98,11 +98,6 @@ exports.placeOrder = async (req, res) => {
       validCouponId = coupon._id;
       validCouponCode = coupon.code;
 
-      // // Increment usage count
-      // coupon.usedCount = (coupon.usedCount || 0) + 1;
-      // user.usedCoupons.push(validCouponId);
-      // await coupon.save({ session });
-      // await user.save({session})
     }
 
     const grandTotal = subTotal - discount;
@@ -165,7 +160,7 @@ exports.placeOrder = async (req, res) => {
         quantity: item.quantity,
         price: item.price,
         subtotal: item.price * item.quantity,
-        itemStatus: "Pending",
+        itemStatus: "Confirmed",
       })),
       address: {
         addressId: address.addressId,
@@ -178,8 +173,8 @@ exports.placeOrder = async (req, res) => {
       grandTotal,
       walletAmountUsed: walletUsed,
       paymentMethod,
-      paymentStatus: paymentMethod === "cod" ? "Pending" : "Paid",
-      orderStatus: "Pending",
+      paymentStatus: paymentMethod === "cod" ? "N/A" : "Paid",
+      orderStatus: "Confirmed",
     });
 
     await order.save({ session });
