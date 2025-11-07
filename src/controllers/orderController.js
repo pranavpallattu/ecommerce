@@ -96,17 +96,20 @@ exports.viewOrder = async (req, res) => {
 
 exports.orderStatus = async (req, res) => {
   const STATUS_TRANSITIONS = {
+    Pending: ["Confirmed", "Cancelled"],
+    Confirmed: ["Processing", "Cancelled"],
     Processing: ["Shipped", "Cancelled"],
-    Shipped: ["Delivered", "Cancelled"],
-    Delivered: ["Cancelled"],
-    PartiallyCancelled: ["Shipped", "Cancelled"],
+    Shipped: ["Delivered"],
+    Delivered: [],
     Cancelled: [],
+    Returned: [],
   };
-  // const DEFAULT_STATUS = "Processing";
+  // const DEFAULT_STATUS = "Pending";
 
-  const CANCELLABLE_ITEM_STATUSES = ["Processing", "Shipped"];
+  const CANCELLABLE_ITEM_STATUSES = ["Processing", "Confirmed"];
 
   const NON_CANCELLABLE_ITEM_STATUSES = [
+    "Shipped",
     "Delivered",
     "Cancelled",
     "ReturnPending",
@@ -162,14 +165,9 @@ exports.orderStatus = async (req, res) => {
       });
     }
 
-    if (status === "Delivered") {
-      order.deliveredAt = new Date();
-      order.paymentStatus = "Paid";
+    if (status !== "Cancelled") {
       for (const item of order.items) {
-        if (item.itemStatus !== "Cancelled") {
-          item.itemStatus = "Delivered";
-          item.deliveredAt = new Date();
-        }
+        item.itemStatus = status;
       }
     }
 
@@ -178,117 +176,90 @@ exports.orderStatus = async (req, res) => {
 
     // 7. === CANCELLATION: RESTORE STOCK + REFUND ===
     if (status === "Cancelled" && order.orderStatus !== "Cancelled") {
-      // Calculate max refundable
-
-      const totalProcessed = order.refunds
-        .filter((refundRecord) => refundRecord.status === "Processed")
-        .reduce((sum, refundRecord) => sum + refundRecord.amount, 0);
-
-      const maxRefundableAmount = order.grandTotal - totalProcessed;
-
       // === RESTORE STOCK & UPDATE ITEMS ==
 
       for (const item of order.items) {
         if (NON_CANCELLABLE_ITEM_STATUSES.includes(item.itemStatus)) {
-          await session.abortTransaction();
           return res.status(400).json({
             success: false,
             message: `Item ${item.productId} cannot be cancelled in its current status`,
           });
         }
 
-        if (CANCELLABLE_ITEM_STATUSES.includes(item.itemStatus)) {
-          const product = await Product.findById(item.productId).session(
-            session
-          );
-          if (product) {
-            product.quantity += item.quantity;
-            await product.save({ session });
-          }
-          item.itemStatus = "Cancelled";
-        }
-      }
+        const product = await Product.findById(item.productId).session(session);
 
-      // wallet refund
-      if (order.paymentMethod === "wallet" && order.walletAmountUsed > 0) {
-        const walletRefund = Math.min(
-          maxRefundableAmount,
-          order.walletAmountUsed
+        if (!product) {
+          const err = new Error(`Product not found for item ${item.productId}`);
+          err.statusCode = 404;
+          throw err;
+        }
+
+        product.quantity += item.quantity;
+        await product.save({ session });
+        item.itemStatus = "Cancelled";
+      }
+    }
+
+    // Calculate max refundable
+
+    const totalProcessed = order.refunds
+      .filter((refundRecord) => refundRecord.status === "Processed")
+      .reduce((sum, refundRecord) => sum + refundRecord.amount, 0);
+
+    const maxRefundableAmount = order.grandTotal - totalProcessed;
+
+    // wallet refund
+    refundAmount = Math.min(maxRefundableAmount, order.grandTotal);
+
+    if (order.paymentMethod === "cod") {
+      order.paymentStatus = "N/A";
+    } else {
+      if (refundAmount > 0) {
+        const walletUpdate = await Wallet.findOneAndUpdate(
+          {
+            userId: order.userId,
+          },
+          {
+            $inc: { balance: refundAmount },
+            $push: {
+              transactionHistory: {
+                type: "credit",
+                amount: refundAmount,
+                description: `Refund for cancelled order #${order._id}`,
+              },
+            },
+          },
+          { upsert: true, new: true, session }
         );
 
-        if (walletRefund > 0) {
-          await Wallet.findOneAndUpdate(
-            {
-              userId: order.userId,
-            },
-            {
-              $inc: { balance: walletRefund },
-              $push: {
-                transactionHistory: {
-                  type: "credit",
-                  amount: walletRefund,
-                  description: `Refund for cancelled order #${order._id}`,
-                },
-              },
-            },
-            { upsert: true, new: true, session }
-          );
-
-          refundRecord = {
-            refundId: `wallet_refund_${Date.now()}_${order._id}`,
-            amount: walletRefund,
-            itemIds: order.items.map((i) => i._id),
-            status: "Processed",
-          };
-          refundAmount += walletRefund;
+        if (!walletUpdate) {
+          throw new Error("update wallet failed");
         }
-      }
 
-      // handle razorpay refund  to wallet
-
-      if (order.paymentMethod === "razorpay" && order.grandTotal > 0) {
-        let razorpayRefund = Math.min(maxRefundableAmount, order.grandTotal);
-
-        if (razorpayRefund > 0) {
-          await Wallet.findOneAndUpdate(
-            { userId: order.userId },
-            {
-              $inc: { balance: razorpayRefund },
-              $push: {
-                transactionHistory: {
-                  type: "credit",
-                  amount: razorpayRefund,
-                  description: `Refund for cancelled order #${order._id}`,
-                },
-              },
-            },
-            { upsert: true, new: true, session }
-          );
-        }
         refundRecord = {
-          refundId: `razorpay_refund_${Date.now()}_${order._id}`,
-          amount: razorpayRefund,
+          refundId: `refund_${crypto.randomUUID()}`,
+          amount: refundAmount,
           itemIds: order.items.map((i) => i._id),
           status: "Processed",
         };
-        refundAmount += razorpayRefund;
       }
+    }
 
-      // push refundRecord
+    // push refundRecord
 
-      if (refundRecord) {
-        const exists = order.refunds.some(
-          (r) => r.refundId === refundRecord.refundId
-        );
-        if (!exists) order.refunds.push(refundRecord);
-      }
+    if (refundRecord) {
+      order.refunds.push(refundRecord);
     }
 
     // update payment status
     const totalPaid = order.paymentMethod === "cod" ? 0 : order.grandTotal;
-    const totalRefunded = refundRecord?.amount || 0;
+    const totalRefunded = order.refunds
+      .filter((r) => r.status === "Processed")
+      .reduce((sum, r) => sum + r.amount, 0);
 
-    if (totalPaid > 0 && totalRefunded >= totalPaid) {
+    if (order.paymentMethod === "cod") {
+      order.paymentStatus = "N/A";
+    } else if (totalPaid > 0 && totalRefunded >= totalPaid) {
       order.paymentStatus = "Refunded";
     } else if (totalRefunded > 0) {
       order.paymentStatus = "PartiallyRefunded";
@@ -412,41 +383,40 @@ exports.orderReturnApprove = async (req, res) => {
     let refundAmount = 0;
     let refundRecord = null;
 
-      refundAmount = Math.min(maxRefundableAmount, order.grandTotal);
+    refundAmount = Math.min(maxRefundableAmount, order.grandTotal);
 
-      const walletUpdate = await Wallet.findOneAndUpdate(
-        {
-          userId: order.userId,
-        },
-        {
-          $inc: { balance: refundAmount },
-          $push: {
-            transactionHistory: {
-              type: "credit",
-              amount: refundAmount,
-              description: `Refund for Returned order #${order._id}`,
-            },
+    const walletUpdate = await Wallet.findOneAndUpdate(
+      {
+        userId: order.userId,
+      },
+      {
+        $inc: { balance: refundAmount },
+        $push: {
+          transactionHistory: {
+            type: "credit",
+            amount: refundAmount,
+            description: `Refund for Returned order #${order._id}`,
           },
         },
-        { upsert: true, new: true, session }
-      );
+      },
+      { upsert: true, new: true, session }
+    );
 
-      if (!walletUpdate) {
-        throw new Error("Failed to update wallet balance");
-      }
+    if (!walletUpdate) {
+      throw new Error("Failed to update wallet balance");
+    }
 
-      refundRecord = {
-        refundId: `refund_${crypto.randomUUID()}`,
-        amount: refundAmount,
-        itemIds: order.items.map((i) => i._id),
-        reason: order.returnedReason,
-        status: "Processed",
-      };
-      order.refunds.push(refundRecord);
-    
+    refundRecord = {
+      refundId: `refund_${crypto.randomUUID()}`,
+      amount: refundAmount,
+      itemIds: order.items.map((i) => i._id),
+      reason: order.returnedReason,
+      status: "Processed",
+    };
+    order.refunds.push(refundRecord);
 
     // update payment status after refund
-    const totalPaid =  order.grandTotal;
+    const totalPaid = order.grandTotal;
     const totalRefunded = order.refunds
       .filter((r) => r.status === "Processed")
       .reduce((sum, r) => sum + r.amount, 0);
@@ -792,7 +762,7 @@ exports.itemReturnApprove = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
-    const status=error.statusCode || 500;
+    const status = error.statusCode || 500;
     console.error("Error updating item return approve", error);
     return res.status(status).json({ success: false, message: error.message });
   } finally {

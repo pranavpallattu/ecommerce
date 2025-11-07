@@ -136,7 +136,6 @@ exports.placeOrder = async (req, res) => {
         );
         err.statusCode = 409;
         throw err;
-        gi;
       }
     }
 
