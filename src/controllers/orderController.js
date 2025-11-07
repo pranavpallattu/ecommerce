@@ -165,40 +165,104 @@ exports.orderStatus = async (req, res) => {
       });
     }
 
-    if (status !== "Cancelled") {
-      for (const item of order.items) {
-        item.itemStatus = status;
-      }
+ if (status === "Delivered") {
+      order.paymentStatus = "Paid";
+       order.deliveredAt = new Date();
+      order.items.forEach((item) => {
+        if (
+          item.itemStatus !== "Cancelled" &&
+          item.itemStatus !== "Returned"
+        ) {
+          item.itemStatus = "Delivered";
+        }
+      });
     }
+    
+  else if (status === "Cancelled") {
+  for (const item of order.items) {
+    if (NON_CANCELLABLE_ITEM_STATUSES.includes(item.itemStatus)) continue;
+
+    const product = await Product.findById(item.productId).session(session);
+    if (!product) throw new Error(`Product not found for ${item.productId}`);
+
+    product.quantity += item.quantity;
+    await product.save({ session });
+
+    item.itemStatus = "Cancelled";
+  }
+
+  if (order.paymentMethod === "cod") {
+    order.paymentStatus = "N/A";
+  } else {
+    const refundAmount = order.grandTotal;
+    if (refundAmount > 0) {
+      await Wallet.findOneAndUpdate(
+        { userId: order.userId },
+        {
+          $inc: { balance: refundAmount },
+          $push: {
+            transactionHistory: {
+              type: "credit",
+              amount: refundAmount,
+              description: `Refund for cancelled order #${order._id}`,
+            },
+          },
+        },
+        { upsert: true, new: true, session }
+      );
+
+      order.refunds.push({
+        refundId: `refund_${crypto.randomUUID()}`,
+        amount: refundAmount,
+        status: "Processed",
+      });
+
+      order.paymentStatus = "Refunded";
+    }
+  }
+}
+
+    
+    else if (status === "Shipped") {
+      order.items.forEach((item) => {
+        if (
+          item.itemStatus !== "Delivered" &&
+          item.itemStatus !== "Returned"
+        ) {
+          item.itemStatus = "Shipped";
+        }
+      });
+    }
+  
 
     let refundAmount = 0;
     let refundRecord = null;
 
-    // 7. === CANCELLATION: RESTORE STOCK + REFUND ===
-    if (status === "Cancelled" && order.orderStatus !== "Cancelled") {
-      // === RESTORE STOCK & UPDATE ITEMS ==
+    // // 7. === CANCELLATION: RESTORE STOCK + REFUND ===
+    // if (status === "Cancelled" && order.orderStatus !== "Cancelled") {
+    //   // === RESTORE STOCK & UPDATE ITEMS ==
 
-      for (const item of order.items) {
-        if (NON_CANCELLABLE_ITEM_STATUSES.includes(item.itemStatus)) {
-          return res.status(400).json({
-            success: false,
-            message: `Item ${item.productId} cannot be cancelled in its current status`,
-          });
-        }
+    //   for (const item of order.items) {
+    //     if (NON_CANCELLABLE_ITEM_STATUSES.includes(item.itemStatus)) {
+    //       return res.status(400).json({
+    //         success: false,
+    //         message: `Item ${item.productId} cannot be cancelled in its current status`,
+    //       });
+    //     }
 
-        const product = await Product.findById(item.productId).session(session);
+    //     const product = await Product.findById(item.productId).session(session);
 
-        if (!product) {
-          const err = new Error(`Product not found for item ${item.productId}`);
-          err.statusCode = 404;
-          throw err;
-        }
+    //     if (!product) {
+    //       const err = new Error(`Product not found for item ${item.productId}`);
+    //       err.statusCode = 404;
+    //       throw err;
+    //     }
 
-        product.quantity += item.quantity;
-        await product.save({ session });
-        item.itemStatus = "Cancelled";
-      }
-    }
+    //     product.quantity += item.quantity;
+    //     await product.save({ session });
+    //     item.itemStatus = "Cancelled";
+    //   }
+    // }
 
     // Calculate max refundable
 

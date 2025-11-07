@@ -6,6 +6,7 @@ const { generateOtp, verifyOtp } = require("../utils/otp");
 const { sendOtpEmail } = require("../config/nodemailer");
 const validator = require("validator");
 const Otp = require("../models/otpSchema");
+const sendSMS = require("../config/twiliosms");
 exports.googleVerifyCallback = async (req, res) => {
   try {
     const user = req.user;
@@ -121,6 +122,8 @@ if (user.isBlocked) {
 
       expires: new Date(Date.now() + 8 * 3600000),
     });
+
+    sendSMS("+919961501541","order placed successfully")
 
     return res.json({ message: "user login successfully", data: user });
 
