@@ -97,7 +97,6 @@ exports.placeOrder = async (req, res) => {
 
       validCouponId = coupon._id;
       validCouponCode = coupon.code;
-
     }
 
     const grandTotal = subTotal - discount;
@@ -136,7 +135,8 @@ exports.placeOrder = async (req, res) => {
           `Insufficient stock for ${item.productName}. Only ${product.quantity} available.`
         );
         err.statusCode = 409;
-        throw err;gi
+        throw err;
+        gi;
       }
     }
 
@@ -579,7 +579,7 @@ exports.cancelSingleItem = async (req, res) => {
     }
     // Add refund amount to wallet for both wallet and razorpay payment
     else {
-      await Wallet.findOneAndUpdate(
+      const walletUpdate = await Wallet.findOneAndUpdate(
         { userId: user._id },
         {
           $inc: { balance: actualRefundAmount },
@@ -593,6 +593,10 @@ exports.cancelSingleItem = async (req, res) => {
         },
         { upsert: true, new: true, session }
       );
+
+      if (!walletUpdate) {
+        throw new Error("Failed to update wallet balance");
+      }
 
       // Add refund record
       refundRecord = {
