@@ -104,233 +104,223 @@ exports.orderStatus = async (req, res) => {
     Cancelled: [],
     Returned: [],
   };
-  // const DEFAULT_STATUS = "Pending";
 
-  const CANCELLABLE_ITEM_STATUSES = ["Processing", "Confirmed"];
-
-  const NON_CANCELLABLE_ITEM_STATUSES = [
-    "Shipped",
-    "Delivered",
-    "Cancelled",
-    "ReturnPending",
-    "Returned",
-    "ReturnRejected",
-  ];
+  const CANCELLABLE_ITEM_STATUSES = ["Pending", "Processing", "Confirmed"];
 
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
     const { orderId } = req.params;
     const { status } = req.body;
-    if (!mongoose.Types.ObjectId.isValid(orderId)) {
-      await session.abortTransaction();
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid orderId" });
-    }
-
-    const validStatuses = Object.keys(STATUS_TRANSITIONS);
-    if (!status || !validStatuses.includes(status)) {
-      await session.abortTransaction();
-      return res.status(400).json({
-        success: false,
-        message: `Invalid status. Status must be one of ${validStatuses.join(
-          ", "
-        )} `,
-      });
-    }
-
-    const order = await Order.findById(orderId).session(session);
-    if (!order) {
-      await session.abortTransaction();
-      return res
-        .status(404)
-        .json({ success: false, message: "Order not found" });
-    }
-
-    // prevent same status
-    if (order.orderStatus === status) {
-      await session.abortTransaction();
-      return res
-        .status(400)
-        .json({ success: false, message: `Order is already ${status}` });
-    }
-
-    const statusAllowedNext = STATUS_TRANSITIONS[order.orderStatus] || [];
-    if (!statusAllowedNext.includes(status)) {
-      await session.abortTransaction();
-      return res.status(400).json({
-        success: false,
-        message: `Cannot change from ${order.orderStatus} to ${status}`,
-      });
-    }
-
- if (status === "Delivered") {
-      order.paymentStatus = "Paid";
-       order.deliveredAt = new Date();
-      order.items.forEach((item) => {
-        if (
-          item.itemStatus !== "Cancelled" &&
-          item.itemStatus !== "Returned"
-        ) {
-          item.itemStatus = "Delivered";
-        }
-      });
-    }
-    
-  else if (status === "Cancelled") {
-  for (const item of order.items) {
-    if (NON_CANCELLABLE_ITEM_STATUSES.includes(item.itemStatus)) continue;
-
-    const product = await Product.findById(item.productId).session(session);
-    if (!product) throw new Error(`Product not found for ${item.productId}`);
-
-    product.quantity += item.quantity;
-    await product.save({ session });
-
-    item.itemStatus = "Cancelled";
-  }
-
-  if (order.paymentMethod === "cod") {
-    order.paymentStatus = "N/A";
-  } else {
-    const refundAmount = order.grandTotal;
-    if (refundAmount > 0) {
-      await Wallet.findOneAndUpdate(
-        { userId: order.userId },
-        {
-          $inc: { balance: refundAmount },
-          $push: {
-            transactionHistory: {
-              type: "credit",
-              amount: refundAmount,
-              description: `Refund for cancelled order #${order._id}`,
-            },
-          },
-        },
-        { upsert: true, new: true, session }
-      );
-
-      order.refunds.push({
-        refundId: `refund_${crypto.randomUUID()}`,
-        amount: refundAmount,
-        status: "Processed",
-      });
-
-      order.paymentStatus = "Refunded";
-    }
-  }
-}
-
-    
-    else if (status === "Shipped") {
-      order.items.forEach((item) => {
-        if (
-          item.itemStatus !== "Delivered" &&
-          item.itemStatus !== "Returned"
-        ) {
-          item.itemStatus = "Shipped";
-        }
-      });
-    }
-  
 
     let refundAmount = 0;
     let refundRecord = null;
 
-    // // 7. === CANCELLATION: RESTORE STOCK + REFUND ===
-    // if (status === "Cancelled" && order.orderStatus !== "Cancelled") {
-    //   // === RESTORE STOCK & UPDATE ITEMS ==
+    if (!mongoose.Types.ObjectId.isValid(orderId)) {
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID. Please provide a valid order identifier.",
+      });
+    }
 
-    //   for (const item of order.items) {
-    //     if (NON_CANCELLABLE_ITEM_STATUSES.includes(item.itemStatus)) {
-    //       return res.status(400).json({
-    //         success: false,
-    //         message: `Item ${item.productId} cannot be cancelled in its current status`,
-    //       });
-    //     }
+    const validStatuses = Object.keys(STATUS_TRANSITIONS);
+    if (!status || !validStatuses.includes(status)) {
+      const err = new Error(
+        `Invalid status value. Allowed statuses: ${validStatuses.join(", ")}.`
+      );
+      err.statusCode = 400;
+      throw err;
+    }
 
-    //     const product = await Product.findById(item.productId).session(session);
+    const order = await Order.findById(orderId).session(session);
+    if (!order) {
+      const err = new Error("Order not found");
+      err.statusCode = 404;
+      throw err;
+    }
 
-    //     if (!product) {
-    //       const err = new Error(`Product not found for item ${item.productId}`);
-    //       err.statusCode = 404;
-    //       throw err;
-    //     }
+    // prevent same status
+    if (order.orderStatus === status) {
+      const err = new Error(
+        `The order is already marked as '${status}'. No update required.`
+      );
+      err.statusCode = 400;
+      throw err;
+    }
 
-    //     product.quantity += item.quantity;
-    //     await product.save({ session });
-    //     item.itemStatus = "Cancelled";
-    //   }
-    // }
+    const statusAllowedNext = STATUS_TRANSITIONS[order.orderStatus] || [];
+    if (!statusAllowedNext.includes(status)) {
+      const err = new Error(
+        `Invalid status transition: cannot move order from '${order.orderStatus}' to '${status}'.`
+      );
+      err.statusCode = 400;
+      throw err;
+    }
 
-    // Calculate max refundable
-
-    const totalProcessed = order.refunds
-      .filter((refundRecord) => refundRecord.status === "Processed")
-      .reduce((sum, refundRecord) => sum + refundRecord.amount, 0);
-
-    const maxRefundableAmount = order.grandTotal - totalProcessed;
-
-    // wallet refund
-    refundAmount = Math.min(maxRefundableAmount, order.grandTotal);
-
-    if (order.paymentMethod === "cod") {
-      order.paymentStatus = "N/A";
-    } else {
-      if (refundAmount > 0) {
-        const walletUpdate = await Wallet.findOneAndUpdate(
-          {
-            userId: order.userId,
-          },
-          {
-            $inc: { balance: refundAmount },
-            $push: {
-              transactionHistory: {
-                type: "credit",
-                amount: refundAmount,
-                description: `Refund for cancelled order #${order._id}`,
-              },
-            },
-          },
-          { upsert: true, new: true, session }
-        );
-
-        if (!walletUpdate) {
-          throw new Error("update wallet failed");
-        }
-
-        refundRecord = {
-          refundId: `refund_${crypto.randomUUID()}`,
-          amount: refundAmount,
-          itemIds: order.items.map((i) => i._id),
-          status: "Processed",
-        };
+    if (status === "Confirmed") {
+      if (order.orderStatus === "Pending") {
+        order.items.forEach((item) => {
+          if (item.itemStatus !== "Pending") {
+            const err = new Error("Only pending orders can be confirmed.");
+            err.statusCode = 400;
+            throw err;
+          }
+          item.itemStatus = status;
+        });
+        order.orderStatus = status;
       }
     }
 
-    // push refundRecord
-
-    if (refundRecord) {
-      order.refunds.push(refundRecord);
+    if (status === "Processing") {
+      if (order.orderStatus !== "Confirmed") {
+        const err = new Error(
+          "Order must be in the 'Confirmed' state before moving to 'Processing'."
+        );
+        err.statusCode = 400;
+        throw err;
+      }
+      order.items.forEach((item) => {
+        if (item.itemStatus !== "Confirmed") {
+          const err = new Error(
+            "All items must be confirmed before moving the order to processing."
+          );
+          err.statusCode = 400;
+          throw err;
+        }
+        item.itemStatus = status;
+      });
+      order.orderStatus = status;
     }
 
-    // update payment status
-    const totalPaid = order.paymentMethod === "cod" ? 0 : order.grandTotal;
-    const totalRefunded = order.refunds
-      .filter((r) => r.status === "Processed")
-      .reduce((sum, r) => sum + r.amount, 0);
-
-    if (order.paymentMethod === "cod") {
-      order.paymentStatus = "N/A";
-    } else if (totalPaid > 0 && totalRefunded >= totalPaid) {
-      order.paymentStatus = "Refunded";
-    } else if (totalRefunded > 0) {
-      order.paymentStatus = "PartiallyRefunded";
+    if (status === "Shipped") {
+      if (order.orderStatus !== "Processing") {
+        const err = new Error(
+          "Order must be in the 'Processing' state before marking it as 'Shipped'."
+        );
+        err.statusCode = 400;
+        throw err;
+      }
+      order.items.forEach((item) => {
+        if (item.itemStatus !== "Processing") {
+          const err = new Error(
+            "All items must be processing before marking the order as shipped."
+          );
+          err.statusCode = 400;
+          throw err;
+        }
+        item.itemStatus = status;
+      });
+      order.orderStatus = status;
     }
 
-    // update order status
-    order.orderStatus = status;
+    if (status === "Delivered") {
+      if (order.orderStatus !== "Shipped") {
+        const err = new Error(
+          "Order must be in the 'Shipped' state before marking it as 'Delivered'."
+        );
+        err.statusCode = 400;
+        throw err;
+      }
+      order.items.forEach((item) => {
+        if (item.itemStatus !== "Shipped") {
+          const err = new Error(
+            "All items must be shipped before marking the order as delivered."
+          );
+          err.statusCode = 400;
+          throw err;
+        }
+        item.itemStatus = status;
+        item.deliveredAt = new Date();
+      });
+      order.orderStatus = status;
+      order.paymentStatus = "Paid";
+      order.deliveredAt = new Date();
+    }
+
+    if (status === "Cancelled") {
+      for (const item of order.items) {
+        if (!CANCELLABLE_ITEM_STATUSES.includes(item.itemStatus)) {
+          const err = new Error(
+            `Item ${item.productId} cannot be cancelled (current status: ${item.itemStatus}).`
+          );
+          err.statusCode = 400;
+          throw err;
+        }
+      }
+
+      for (const item of order.items) {
+        const product = await Product.findById(item.productId).session(session);
+        if (!product) {
+          const err = new Error(
+            `Product not found for item ${item.productId}. Cannot cancel.`
+          );
+          err.statusCode = 400;
+          throw err;
+        }
+
+        product.quantity += item.quantity;
+        await product.save({ session });
+        item.itemStatus = "Cancelled";
+        item.cancelledAt = new Date();
+      }
+
+      if (order.paymentMethod === "cod") {
+        order.paymentStatus = "N/A";
+        refundAmount = 0;
+      } else {
+        const totalPreviousRefunds = order.refunds
+          .filter((r) => r.status === "Processed")
+          .reduce((sum, r) => sum + r.amount, 0);
+
+        const maxRefundable = order.grandTotal - totalPreviousRefunds;
+        refundAmount = Math.min(order.grandTotal, maxRefundable);
+
+        if (refundAmount <= 0) {
+          const err = new Error("No refundable amount remaining");
+          err.statusCode = 400;
+          throw err;
+        }
+        if (refundAmount > 0) {
+          const walletUpdate = await Wallet.findOneAndUpdate(
+            { userId: order.userId },
+            {
+              $inc: { balance: refundAmount },
+              $push: {
+                transactionHistory: {
+                  type: "credit",
+                  amount: refundAmount,
+                  description: `Refund for cancelled order #${order._id}`,
+                },
+              },
+            },
+            { upsert: true, new: true, session }
+          );
+
+          if (!walletUpdate) {
+            const err = new Error(
+              "Failed to update wallet balance. Refund could not be processed."
+            );
+            err.statusCode = 400;
+            throw err;
+          }
+
+          refundRecord = {
+            refundId: `refund_${crypto.randomUUID()}`,
+            amount: refundAmount,
+            itemIds: order.items.map((i) => i._id),
+            status: "Processed",
+          };
+
+          order.refunds.push(refundRecord);
+
+          order.paymentStatus = "Refunded";
+        }
+      }
+
+      order.orderStatus = "Cancelled";
+      order.cancelledAt = new Date();
+    }
 
     // save
     await order.save({ session });
@@ -343,17 +333,20 @@ exports.orderStatus = async (req, res) => {
       data: {
         orderId: order._id,
         orderStatus: order.orderStatus,
+        paymentStatus: order.paymentStatus,
         deliveredAt: order.deliveredAt || null,
         refundAmount: refundAmount > 0 ? Number(refundAmount.toFixed(2)) : null,
         refundedTo: refundAmount > 0 ? "wallet" : null,
+        refundId: refundRecord?.refundId || null,
       },
     });
 
     // wallet Refund
   } catch (error) {
     await session.abortTransaction();
+    const status = error.statusCode || 500;
     console.error("Error updating order status", error);
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(status).json({ success: false, message: error.message });
   } finally {
     session.endSession();
   }
@@ -833,8 +826,3 @@ exports.itemReturnApprove = async (req, res) => {
     await session.endSession();
   }
 };
-
-//     refundId: `razorpay_wallet_refund_${Date.now()}_${
-//       order._id
-//     }_${Math.random().toString(36).substring(2, 7)}`,
-//

@@ -124,7 +124,7 @@ exports.placeOrder = async (req, res) => {
 
     // Step 1: Validate ALL products first
     for (const item of cart.items) {
-      const product = await Product.findById(item.productId).session(session);
+      const product = await Product.findById(item.product).session(session);
       if (!product) {
         const err = new Error(`Product not found: ${item.productName}`);
         err.statusCode = 404;
