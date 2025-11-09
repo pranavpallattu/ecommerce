@@ -9,7 +9,7 @@ const userAuthMiddleware = async (req, res, next) => {
     return  res.status(401).json({ message: "Please Login" });
     }
 
-    const decodedObj = jwt.verify(token, "ecommerce@2025");
+    const decodedObj = jwt.verify(token, process.env.JWT_SECRET_KEY);
     const { _id } = decodedObj;
 
     const user = await User.findById(_id);
