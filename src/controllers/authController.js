@@ -10,9 +10,13 @@ const sendSMS = require("../config/twiliosms");
 exports.googleVerifyCallback = async (req, res) => {
   try {
     const user = req.user;
-    const token = await jwt.sign({ _id: user._id }, process.env.JWT_SECRET_KEY, {
-      expiresIn: "1d",
-    });
+    const token = await jwt.sign(
+      { _id: user._id },
+      process.env.JWT_SECRET_KEY,
+      {
+        expiresIn: "1d",
+      }
+    );
     console.log(token);
 
     res.cookie("token", token, {
@@ -34,6 +38,14 @@ exports.signUpController = async (req, res) => {
 
     const { emailId, password, name, otp } = req.body;
 
+    // check user exists
+    const existingUser = await User.findOne({ emailId });
+    if (existingUser) {
+      return res
+        .status(409)
+        .json({ success: false, message: "User already exists" });
+    }
+
     // find otp
     const existingOtp = await Otp.findOne({ emailId });
     if (!existingOtp)
@@ -45,11 +57,6 @@ exports.signUpController = async (req, res) => {
     // hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // check user exists
-    const existingUser = await User.findOne({ emailId });
-    if (existingUser) {
-      return res.status(401).json({ message: "User already exists" });
-    }
     // create new user
     const newUser = new User({
       name,
@@ -62,9 +69,13 @@ exports.signUpController = async (req, res) => {
     await Otp.deleteMany({ emailId });
 
     // generate token
-    const token = await jwt.sign({ _id: newUser._id,isAdmin:false }, process.env.JWT_SECRET_KEY, {
-      expiresIn: "1d",
-    });
+    const token = await jwt.sign(
+      { _id: newUser._id, isAdmin: false },
+      process.env.JWT_SECRET_KEY,
+      {
+        expiresIn: "1d",
+      }
+    );
     console.log(token);
 
     res.cookie("token", token, {
@@ -100,21 +111,24 @@ exports.loginController = async (req, res) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    
     // In loginController, after finding user:
-if (user.isBlocked) {
-  return res.status(403).json({ 
-    success: false, 
-    message: "Your account has been blocked" 
-  });
-}
+    if (user.isBlocked) {
+      return res.status(403).json({
+        success: false,
+        message: "Your account has been blocked",
+      });
+    }
 
     // set token
 
     // generate token
-    const token = await jwt.sign({ _id: user._id, role: user.role }, process.env.JWT_SECRET_KEY, {
-      expiresIn: "1d",
-    });
+    const token = await jwt.sign(
+      { _id: user._id, role: user.role },
+      process.env.JWT_SECRET_KEY,
+      {
+        expiresIn: "1d",
+      }
+    );
     console.log(token);
 
     res.cookie("token", token, {
@@ -123,7 +137,7 @@ if (user.isBlocked) {
       expires: new Date(Date.now() + 8 * 3600000),
     });
 
-    sendSMS("+919961501541","order placed successfully")
+    sendSMS("+919961501541", "order placed successfully");
 
     return res.json({ message: "user login successfully", data: user });
 
@@ -134,16 +148,14 @@ if (user.isBlocked) {
   }
 };
 
+exports.logoutController = async (req, res) => {
+  try {
+    res.clearCookie("token");
 
-exports.logoutController=async(req,res)=>{
-  try{
-    res.clearCookie("token")
-
-    res.status(201).json({success:true,message:"User logged out successfully"})
-
-
-  }
-  catch (error) {
+    res
+      .status(201)
+      .json({ success: true, message: "User logged out successfully" });
+  } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
-}
+};

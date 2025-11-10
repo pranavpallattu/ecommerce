@@ -14,7 +14,10 @@ const userSchema=new mongoose.Schema({
     },
     password:{
         type:String,
-        required:false
+        // password required only if not google login
+        required: function(){
+            return !googleId
+        }
     },
     phone:{
         type:Number,
