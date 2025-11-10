@@ -8,13 +8,11 @@ const generateOtp=()=>{
 
 // converts both to buffer (raw byte)
 // avoids a timing attack
-
 const verifyOtp=(inputOtp, storedOtp)=>{
     return crypto.timingSafeEqual(
         Buffer.from(inputOtp),
         Buffer.from(storedOtp)
     )
 }
-
 
 module.exports={generateOtp, verifyOtp}

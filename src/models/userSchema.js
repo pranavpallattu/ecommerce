@@ -1,58 +1,59 @@
 const { default: mongoose } = require("mongoose");
 
-const userSchema=new mongoose.Schema({
-    
-    name:{
-        type:String,
-        required:true
+const userSchema = new mongoose.Schema(
+  {
+    name: {
+      type: String,
+      required: true,
     },
-    emailId:{
-        type:String,
-        required:true,
-        unique:true,
-        lowercase:true
+    emailId: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
     },
-    password:{
-        type:String,
-        // password required only if not google login
-        required: function(){
-            return !googleId
-        }
+    password: {
+      type: String,
+      // password required only if not google login
+      required: function () {
+        return !googleId;
+      },
     },
-    phone:{
-        type:Number,
-        required:false,
-        unique:false
+    phone: {
+      type: String,
+      required: false,
+      unique: false,
+      sparse: true,
     },
-    googleId:{
-        type:String,
-        unique:true,
-        sparse:true,
-        default:null
+    googleId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      default: null,
     },
-    isBlocked:{
-        type:Boolean,
-        default:false
+    isBlocked: {
+      type: Boolean,
+      default: false,
     },
-    isAdmin:{
-        type:Boolean,
-        default:false
+    isAdmin: {
+      type: Boolean,
+      default: false,
     },
-    usedCoupons:[
+    usedCoupons: [
       {
-         couponId:{
-            type:mongoose.Schema.Types.ObjectId,
-            ref:"Coupon"
+        couponId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Coupon",
         },
-        useCount:{
-            type:Number,
-            default:0
-        }
-       }
-    ]
+        useCount: {
+          type: Number,
+          default: 0,
+        },
+      },
+    ],
+  },
+  { timestamps: true }
+);
 
-})
-
-
-const User =  mongoose.model("User",userSchema)
-module.exports= User
+const User = mongoose.model("User", userSchema);
+module.exports = User;

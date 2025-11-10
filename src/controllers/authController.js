@@ -10,8 +10,14 @@ const sendSMS = require("../config/twiliosms");
 exports.googleVerifyCallback = async (req, res) => {
   try {
     const user = req.user;
+    if (user.isBlocked) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Your account has been blocked" });
+    }
+
     const token = await jwt.sign(
-      { _id: user._id },
+      { _id: user._id, isAdmin: user.isAdmin },
       process.env.JWT_SECRET_KEY,
       {
         expiresIn: "1d",
@@ -25,9 +31,18 @@ exports.googleVerifyCallback = async (req, res) => {
       expires: new Date(Date.now() + 8 * 3600000),
     });
 
-    res.json({ message: "Login Succesfull" });
+    res.status(200).json({ success: true, message: "Login Succesful",data:{
+       _id: user._id,
+        name: user.name,
+        emailId: user.emailId,
+        isAdmin: user.isAdmin
+    } });
   } catch (error) {
-    res.status(400).send(error);
+    console.error("Google auth error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Authentication failed",
+    });
   }
 };
 
@@ -41,18 +56,32 @@ exports.signUpController = async (req, res) => {
     // check user exists
     const existingUser = await User.findOne({ emailId });
     if (existingUser) {
-      return res
-        .status(409)
-        .json({ success: false, message: "User already exists" });
+      return res.status(409).json({
+        success: false,
+        message: "User with this email already exists",
+      });
     }
 
     // find otp
     const existingOtp = await Otp.findOne({ emailId });
     if (!existingOtp)
-      return res.status(401).json({ message: "OTP not found or expired" });
+      return res.status(401).json({
+        message: "OTP not found or expired. Please request a new one.",
+      });
+
+    // check attempts
+    if (existingOtp.attempts > 3) {
+      await Otp.deleteMany({ emailId });
+      return res.status(429).json({
+        success: false,
+        message: "Too many failed attempts. Please request a new OTP.",
+      });
+    }
+
     // verify otp
-    if (existingOtp.otp !== otp)
-      return res.status(401).json({ message: "Invalid OTP" });
+    if (existingOtp.otp !== otp) existingOtp.attempts += 1;
+    await existingOtp.save();
+    return res.status(401).json({ message: "Invalid OTP. Please try again." });
 
     // hash password
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -76,16 +105,27 @@ exports.signUpController = async (req, res) => {
         expiresIn: "1d",
       }
     );
-    console.log(token);
 
     res.cookie("token", token, {
       httpOnly: true,
       expires: new Date(Date.now() + 8 * 3600000),
     });
 
-    return res.json({ message: "user registered successfully", data: newUser });
+    return res.status(201).json({
+      message: "User registered successfully",
+      data: {
+        _id: newUser._id,
+        name: newUser.name,
+        emailId: newUser.emailId,
+        isAdmin: newUser.isAdmin,
+      },
+    });
   } catch (error) {
-    res.status(400).send(error);
+    console.error("Signup error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Registration failed. Please try again.",
+    });
     console.error(error);
   }
 };
@@ -105,18 +145,20 @@ exports.loginController = async (req, res) => {
     if (!user) {
       return res.status(401).json({ message: "Invalid credentials" });
     }
-    // password validation
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: "Invalid credentials" });
-    }
 
-    // In loginController, after finding user:
     if (user.isBlocked) {
       return res.status(403).json({
         success: false,
-        message: "Your account has been blocked",
+        message: "Your account has been blocked. Contact support. ",
       });
+    }
+
+    // password validation
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res
+        .status(401)
+        .json({ success: false, message: "Invalid credentials" });
     }
 
     // set token
@@ -137,14 +179,24 @@ exports.loginController = async (req, res) => {
       expires: new Date(Date.now() + 8 * 3600000),
     });
 
-    sendSMS("+919961501541", "order placed successfully");
-
-    return res.json({ message: "user login successfully", data: user });
+    return res.status(200).json({
+      success: true,
+      message: "Login successful",
+      data: {
+        _id: user._id,
+        name: user.name,
+        emailId: user.emailId,
+        isAdmin: user.isAdmin,
+      },
+    });
 
     // set cookie
   } catch (error) {
-    console.error(error);
-    return res.status(400).send(error);
+    console.error("Login error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Login failed. Please try again.",
+    });
   }
 };
 
