@@ -31,12 +31,16 @@ exports.googleVerifyCallback = async (req, res) => {
       expires: new Date(Date.now() + 8 * 3600000),
     });
 
-    res.status(200).json({ success: true, message: "Login Succesful",data:{
-       _id: user._id,
+    res.status(200).json({
+      success: true,
+      message: "Login Succesful",
+      data: {
+        _id: user._id,
         name: user.name,
         emailId: user.emailId,
-        isAdmin: user.isAdmin
-    } });
+        isAdmin: user.isAdmin,
+      },
+    });
   } catch (error) {
     console.error("Google auth error:", error);
     return res.status(500).json({
@@ -62,6 +66,8 @@ exports.signUpController = async (req, res) => {
       });
     }
 
+    await generateOtp();
+
     // find otp
     const existingOtp = await Otp.findOne({ emailId });
     if (!existingOtp)
@@ -69,8 +75,10 @@ exports.signUpController = async (req, res) => {
         message: "OTP not found or expired. Please request a new one.",
       });
 
+    await verifyOtp(otp, existingOtp);
+
     // check attempts
-    if (existingOtp.attempts > 3) {
+    if (existingOtp.attempts >= 3) {
       await Otp.deleteMany({ emailId });
       return res.status(429).json({
         success: false,
@@ -79,9 +87,13 @@ exports.signUpController = async (req, res) => {
     }
 
     // verify otp
-    if (existingOtp.otp !== otp) existingOtp.attempts += 1;
-    await existingOtp.save();
-    return res.status(401).json({ message: "Invalid OTP. Please try again." });
+    if (existingOtp.otp !== otp) {
+      existingOtp.attempts += 1;
+      await existingOtp.save();
+      return res
+        .status(401)
+        .json({ message: "Invalid OTP. Please try again." });
+    }
 
     // hash password
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -133,7 +145,7 @@ exports.signUpController = async (req, res) => {
 exports.loginController = async (req, res) => {
   try {
     // validate Email
-    const { emailId, password } = req.body;
+    const { emailId, password, otp } = req.body;
 
     if (!validator.isEmail(emailId)) {
       return res.status(401).json({ message: "Invalid credentials" });
@@ -151,6 +163,30 @@ exports.loginController = async (req, res) => {
         success: false,
         message: "Your account has been blocked. Contact support. ",
       });
+    }
+
+    const existingOtp = await Otp.findOne({ emailId });
+    if (!existingOtp)
+      return res.status(401).json({
+        message: "OTP not found or expired. Please request a new one.",
+      });
+
+    // check attempts
+    if (existingOtp.attempts > 3) {
+      await Otp.deleteMany({ emailId });
+      return res.status(429).json({
+        success: false,
+        message: "Too many failed attempts. Please request a new OTP.",
+      });
+    }
+
+    // verify otp
+    if (existingOtp.otp !== otp) {
+      existingOtp.attempts += 1;
+      await existingOtp.save();
+      return res
+        .status(401)
+        .json({ message: "Invalid OTP. Please try again." });
     }
 
     // password validation
@@ -172,6 +208,9 @@ exports.loginController = async (req, res) => {
       }
     );
     console.log(token);
+
+    // delete otp one time use
+    await Otp.deleteMany({ emailId });
 
     res.cookie("token", token, {
       httpOnly: true,
