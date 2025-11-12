@@ -13,7 +13,7 @@ passport.use(
     async (accessToken, refreshToken, profile, done) => {
       try {
         // Check if user exists
-        let user = await User.findOne({ googleId: profile.id });
+        let user = await User.findOne({$or : [{ googleId: profile.id }, {emailId: profile.emails[0].value} ]});
         console.log(profile);
         
         // console.log(user);
@@ -27,10 +27,10 @@ passport.use(
           });
           await user.save();
         }
-
-
+        
         return done(null,user);
       } catch (err) {
+        console.error(err);
         return done(err, null);
       }
     }

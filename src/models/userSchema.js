@@ -16,7 +16,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       // password required only if not google login
       required: function () {
-        return !googleId;
+        return !this.googleId;
       },
     },
     phone: {
