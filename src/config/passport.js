@@ -16,8 +16,6 @@ passport.use(
         let user = await User.findOne({$or : [{ googleId: profile.id }, {emailId: profile.emails[0].value} ]});
         console.log(profile);
         
-        // console.log(user);
-
         if (!user) {
           // Create new user
           user = new User({
@@ -27,10 +25,9 @@ passport.use(
           });
           await user.save();
         }
-        
         return done(null,user);
       } catch (err) {
-        console.error(err);
+        console.error(err); 
         return done(err, null);
       }
     }
