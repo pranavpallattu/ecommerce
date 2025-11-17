@@ -50,24 +50,82 @@ exports.googleVerifyCallback = async (req, res) => {
   }
 };
 
-exports.signUpController = async (req, res) => {
+exports.requestSignupOtp = async (req, res) => {
   try {
-    // validate the data
-    validateSignUpData(req);
+    const { emailId } = req.body;
 
-    const { emailId, password, name, otp } = req.body;
-
-    // check user exists
-    const existingUser = await User.findOne({ emailId });
-    if (existingUser) {
-      return res.status(409).json({
+    if (!emailId) {
+      return res.status(400).json({
         success: false,
-        message: "User with this email already exists",
+        message: "Email is required",
       });
     }
 
-    await generateOtp();
+    // Validate email format
+    if (!validator.isEmail(emailId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid email format",
+      });
+    }
 
+    const normalizedEmail = emailId.toLowerCase().trim();
+
+    // check user exists
+    const existingUser = await User.findOne({ emailId: normalizedEmail });
+    if (existingUser) {
+      return res.status(409).json({
+        success: false,
+        message: "User with this email already exists. Please Login",
+      });
+    }
+
+    const existingOtp = await Otp.findOne({ emailId: normalizedEmail });
+
+    if (existingOtp) {
+      const timeSinceCreated = (Date.now() - existingOtp.createdAt) / 1000;
+      if (timeSinceCreated < 60) {
+        const waitTime = Math.ceil(60 - timeSinceCreated);
+        return res.status(429).json({
+          success: false,
+          message: `Please wait ${waitTime} second${
+            waitTime !== 1 ? "s" : ""
+          } before requesting a new OTP.`,
+          retryAfter: waitTime,
+        });
+      }
+
+      await Otp.deleteOne({ emailId: normalizedEmail });
+    }
+
+    const otp = generateOtp();
+
+    const newOtp = new Otp({
+      emailId,
+      otp,
+      attempts: 0,
+    });
+
+    await newOtp.save();
+
+    await sendOtpEmail(normalizedEmail, otp);
+    return res.status(200).json({
+      success: true,
+      message: `OTP sent to ${normalizedEmail}`,
+      expiresIn: 300, //
+    });
+  }  catch (error) {
+    console.error("Signup OTP error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to send OTP. Please try again.",
+    });
+  }
+};
+
+exports.verifyOtpSignupController = async (req, res) => {
+  try {
+    const { emailId, otp } = req.body;
     // find otp
     const existingOtp = await Otp.findOne({ emailId });
     if (!existingOtp)
@@ -95,14 +153,9 @@ exports.signUpController = async (req, res) => {
         .json({ message: "Invalid OTP. Please try again." });
     }
 
-    // hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
     // create new user
     const newUser = new User({
-      name,
       emailId,
-      password: hashedPassword,
     });
     await newUser.save();
 
@@ -122,23 +175,12 @@ exports.signUpController = async (req, res) => {
       httpOnly: true,
       expires: new Date(Date.now() + 8 * 3600000),
     });
-
-    return res.status(201).json({
-      message: "User registered successfully",
-      data: {
-        _id: newUser._id,
-        name: newUser.name,
-        emailId: newUser.emailId,
-        isAdmin: newUser.isAdmin,
-      },
-    });
   } catch (error) {
-    console.error("Signup error:", error);
-    res.status(500).json({
+    console.error("Login error:", error);
+    return res.status(500).json({
       success: false,
-      message: "Registration failed. Please try again.",
+      message: "Login failed. Please try again.",
     });
-    console.error(error);
   }
 };
 

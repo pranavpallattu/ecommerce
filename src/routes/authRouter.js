@@ -19,7 +19,7 @@ authRouter.get("/google/callback", passport.authenticate("google", { session: fa
 
 authRouter.post("/auth/send-otp", otpController.sendOtp);
 
-authRouter.post("/auth/signup",authController.signUpController)
+authRouter.post("/auth/signup/requestotp",authController.requestSignupOtp)
 
 authRouter.post("/auth/login",authController.loginController)
 
