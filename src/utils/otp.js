@@ -9,9 +9,15 @@ const generateOtp=()=>{
 // converts both to buffer (raw byte)
 // avoids a timing attack
 const verifyOtp=(inputOtp, storedOtp)=>{
+
+    const input=String(inputOtp);
+    const stored=String(storedOtp);
+
+    if(input.length !== stored.length) return false;
+
     return crypto.timingSafeEqual(
-        Buffer.from(inputOtp),
-        Buffer.from(storedOtp)
+        Buffer.from(input),
+        Buffer.from(stored)
     )
 }
 

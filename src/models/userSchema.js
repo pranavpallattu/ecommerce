@@ -4,20 +4,12 @@ const userSchema = new mongoose.Schema(
   {
     name: {
       type: String,
-      required: true,
     },
     emailId: {
       type: String,
       required: true,
       unique: true,
       lowercase: true,
-    },
-    password: {
-      type: String,
-      // password required only if not google login
-      required: function () {
-        return !this.googleId;
-      },
     },
     phone: {
       type: String,
@@ -29,7 +21,6 @@ const userSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
-      default: null,
     },
     isBlocked: {
       type: Boolean,

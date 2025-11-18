@@ -114,7 +114,7 @@ exports.requestSignupOtp = async (req, res) => {
       message: `OTP sent to ${normalizedEmail}`,
       expiresIn: 300, //
     });
-  }  catch (error) {
+  } catch (error) {
     console.error("Signup OTP error:", error);
     res.status(500).json({
       success: false,
@@ -123,21 +123,41 @@ exports.requestSignupOtp = async (req, res) => {
   }
 };
 
-exports.verifyOtpSignupController = async (req, res) => {
+exports.verifySignupOtp = async (req, res) => {
   try {
     const { emailId, otp } = req.body;
+
+    if (!emailId || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and OTP are required",
+      });
+    }
+
+    const normalizedEmail = emailId.toLowerCase().trim();
+
     // find otp
-    const existingOtp = await Otp.findOne({ emailId });
+    const existingOtp = await Otp.findOne({ emailId: normalizedEmail });
     if (!existingOtp)
       return res.status(401).json({
         message: "OTP not found or expired. Please request a new one.",
       });
 
-    await verifyOtp(otp, existingOtp);
+
+    const isExpired =
+      (Date.now() - existingOtp.createdAt.getTime()) / 1000 > 300;
+
+    if (isExpired) {
+      await Otp.deleteMany({ emailId: normalizedEmail });
+      return res.status(410).json({
+        success: false,
+        message: "OTP expired. Please request a new one.",
+      });
+    }
 
     // check attempts
     if (existingOtp.attempts >= 3) {
-      await Otp.deleteMany({ emailId });
+      await Otp.deleteMany({ emailId: normalizedEmail });
       return res.status(429).json({
         success: false,
         message: "Too many failed attempts. Please request a new OTP.",
@@ -145,7 +165,9 @@ exports.verifyOtpSignupController = async (req, res) => {
     }
 
     // verify otp
-    if (existingOtp.otp !== otp) {
+
+    const otpMatch = verifyOtp(otp, existingOtp.otp);
+    if (!otpMatch) {
       existingOtp.attempts += 1;
       await existingOtp.save();
       return res
@@ -155,13 +177,13 @@ exports.verifyOtpSignupController = async (req, res) => {
 
     // create new user
     const newUser = new User({
-      emailId,
+      emailId: normalizedEmail,
+      isAdmin: false,
     });
     await newUser.save();
 
     // delete otp one time use
-    await Otp.deleteMany({ emailId });
-
+    await Otp.deleteMany({ emailId: normalizedEmail });
     // generate token
     const token = await jwt.sign(
       { _id: newUser._id, isAdmin: false },
@@ -175,11 +197,21 @@ exports.verifyOtpSignupController = async (req, res) => {
       httpOnly: true,
       expires: new Date(Date.now() + 8 * 3600000),
     });
+
+    return res.status(201).json({
+      success: true,
+      message: "Signup successful",
+      data: {
+        _id: newUser._id,
+        emailId: newUser.emailId,
+        isAdmin: newUser.isAdmin,
+      },
+    });
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("Verify Signup OTP error:", error);
     return res.status(500).json({
       success: false,
-      message: "Login failed. Please try again.",
+      message: "OTP verification failed. Please try again.",
     });
   }
 };
