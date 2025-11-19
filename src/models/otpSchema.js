@@ -12,7 +12,7 @@ const otpSchema = new mongoose.Schema({
   attempts:{
     type:Number,
     default:0,
-    max:3
+    max:6
   },
   createdAt: {
     type: Date,

@@ -7,6 +7,7 @@ const productController=require("../controllers/productController")
 const customerController=require("../controllers/customerController")
 const couponController=require("../controllers/couponController")
 const orderController=require("../controllers/orderController")
+const salesReportController=require("../controllers/salesReportController")
 
 
 const {adminAuthMiddleware}=require("../middlewares/authMiddleware")
@@ -34,6 +35,13 @@ adminRouter.get("/admin/orders/:orderId",adminAuthMiddleware,orderController.vie
 adminRouter.post("/admin/orders/:orderId",adminAuthMiddleware,orderController.orderStatus);
 adminRouter.post("/admin/orders/return/approve/:orderId",adminAuthMiddleware,orderController.orderReturnApprove);
 // adminRouter.patch("/admin/orders/return/reject/:orderId",adminAuthMiddleware,orderController.orderReturnReject);
+
+
+adminRouter.get("/admin/getsalesreport",adminAuthMiddleware,salesReportController.getSalesReport)
+
+adminRouter.post("/admin/report/pdf",adminAuthMiddleware,salesReportController.downloadSalesPDF)
+adminRouter.post("/admin/report/excel",adminAuthMiddleware,salesReportController.downloadSalesExcel)
+
 
 
 

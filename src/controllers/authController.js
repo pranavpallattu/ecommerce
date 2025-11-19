@@ -184,7 +184,7 @@ exports.verifySignupOtp = async (req, res) => {
     // delete otp one time use
     await Otp.deleteMany({ emailId: normalizedEmail });
     // generate token
-    const token = await jwt.sign(
+    const token = jwt.sign(
       { _id: newUser._id, isAdmin: false },
       process.env.JWT_SECRET_KEY,
       {
@@ -278,12 +278,105 @@ exports.requestLoginOtp = async (req, res) => {
       success: true,
       message: `Login OTP sent to ${normalizedEmail}`,
       expiresIn: 300, //
+      otp
     });
   } catch (error) {
     console.error("Login otp request error:", error);
     return res.status(500).json({
       success: false,
       message: "Login request otp failed. Please try again.",
+    });
+  }
+};
+
+exports.verifyLoginOtp = async (req, res) => {
+  try {
+    const { emailId, otp } = req.body;
+
+    if (!emailId || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Email and OTP are required",
+      });
+    }
+
+    const normalizedEmail = emailId.toLowerCase().trim();
+
+    // find otp
+    const existingOtp = await Otp.findOne({ emailId: normalizedEmail });
+    if (!existingOtp)
+      return res.status(401).json({
+        message: "OTP not found or expired. Please request a new one.",
+      });
+
+    const user = await User.findOne({ emailId: normalizedEmail });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    const isExpired =
+      (Date.now() - existingOtp.createdAt.getTime()) / 1000 > 300;
+
+    if (isExpired) {
+      await Otp.deleteMany({ emailId: normalizedEmail });
+      return res.status(410).json({
+        success: false,
+        message: "OTP expired. Please request a new one.",
+      });
+    }
+
+    // check attempts
+    if (existingOtp.attempts >= 6) {
+      await Otp.deleteMany({ emailId: normalizedEmail });
+      return res.status(429).json({
+        success: false,
+        message: "Too many failed attempts. Please request a new OTP.",
+      });
+    }
+
+    // verify otp
+
+    const otpMatch = verifyOtp(otp, existingOtp.otp);
+    if (!otpMatch) {
+      existingOtp.attempts += 1;
+      await existingOtp.save();
+      return res
+        .status(401)
+        .json({ message: "Invalid OTP. Please try again." });
+    }
+
+    // delete otp one time use
+    await Otp.deleteMany({ emailId: normalizedEmail });
+    // generate token
+    const token = jwt.sign(
+      { _id: user._id, isAdmin: user.isAdmin },
+      process.env.JWT_SECRET_KEY,
+      {
+        expiresIn: "1d",
+      }
+    );
+
+    res.cookie("token", token, {
+      httpOnly: true,
+      expires: new Date(Date.now() + 8 * 3600000),
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Login successful",
+      data: {
+        _id: user._id,
+        emailId: user.emailId,
+        isAdmin: user.isAdmin,
+      },
+    });
+  } catch (error) {
+    console.error("Login otp verification error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Login otp verification failed. Please try again.",
     });
   }
 };
@@ -300,34 +393,3 @@ exports.logoutController = async (req, res) => {
   }
 };
 
-//     // set token
-
-// // generate token
-// const token = await jwt.sign(
-//   { _id: user._id, role: user.role },
-//   process.env.JWT_SECRET_KEY,
-//   {
-//     expiresIn: "1d",
-//   }
-// );
-// console.log(token);
-
-// // delete otp one time use
-// await Otp.deleteMany({ emailId });
-
-// res.cookie("token", token, {
-//   httpOnly: true,
-
-//   expires: new Date(Date.now() + 8 * 3600000),
-// });
-
-// return res.status(200).json({
-//   success: true,
-//   message: "Login successful",
-//   data: {
-//     _id: user._id,
-//     name: user.name,
-//     emailId: user.emailId,
-//     isAdmin: user.isAdmin,
-//   },
-// });
