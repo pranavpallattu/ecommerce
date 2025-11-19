@@ -46,13 +46,19 @@ const generateSalesReport = async ({ startDate, endDate, filterType }) => {
     0
   );
 
-  const totalDiscount = orders.reduce(
-    (sum, order) => sum + (order.discount || 0),
-    0
-  );
+// Calculate total discount from all order items
+const totalDiscount = orders.reduce((sum, order) => {
+  const orderDiscount = order.items.reduce((itemSum, item) => {
+    const regularPrice = item.productId?.regularPrice || 0;
+    const salePrice = item.productId?.salePrice || 0;
+    const discount = (regularPrice - salePrice) * item.quantity;
+    return itemSum + (discount > 0 ? discount : 0);
+  }, 0);
+  return sum + orderDiscount;
+}, 0);
 
   const couponDeduction = orders.reduce(
-    (sum, order) => sum + (order.couponDiscount || 0),
+    (sum, order) => sum + (order.discount || 0),
     0
   );
 
