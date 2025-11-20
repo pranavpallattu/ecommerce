@@ -71,6 +71,9 @@ const totalDiscount = orders.reduce((sum, order) => {
     (o) => o.orderStatus === "Processing"
   ).length;
 
+  const formatDate = (date) => dayjs(date).format("DD/MM/YYYY hh:mm A");
+
+
   return {
       totalOrders,
       totalAmount,
@@ -83,8 +86,8 @@ const totalDiscount = orders.reduce((sum, order) => {
       pending,
       processing,
       filterType,
-      startDate,
-      endDate,
+      startDate:formatDate(startDate),
+      endDate:formatDate(endDate),
   };
 };
 

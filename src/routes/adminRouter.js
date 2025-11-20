@@ -8,6 +8,7 @@ const customerController=require("../controllers/customerController")
 const couponController=require("../controllers/couponController")
 const orderController=require("../controllers/orderController")
 const salesReportController=require("../controllers/salesReportController")
+const dashboardController=require("../controllers/dashboardController")
 
 
 const {adminAuthMiddleware}=require("../middlewares/authMiddleware")
@@ -41,6 +42,7 @@ adminRouter.get("/admin/getsalesreport",adminAuthMiddleware,salesReportControlle
 
 adminRouter.post("/admin/report/pdf",adminAuthMiddleware,salesReportController.downloadSalesPDF)
 adminRouter.post("/admin/report/excel",adminAuthMiddleware,salesReportController.downloadSalesExcel)
+adminRouter.get("/admin/ordersummary",adminAuthMiddleware,dashboardController.getOrderSummary)
 
 
 
