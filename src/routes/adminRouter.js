@@ -43,6 +43,10 @@ adminRouter.get("/admin/getsalesreport",adminAuthMiddleware,salesReportControlle
 adminRouter.post("/admin/report/pdf",adminAuthMiddleware,salesReportController.downloadSalesPDF)
 adminRouter.post("/admin/report/excel",adminAuthMiddleware,salesReportController.downloadSalesExcel)
 adminRouter.get("/admin/ordersummary",adminAuthMiddleware,dashboardController.getOrderSummary)
+adminRouter.get("/admin/bestsellingproducts",adminAuthMiddleware,dashboardController.getBestSellingProducts)
+adminRouter.get("/admin/bestsellingcategories",adminAuthMiddleware,dashboardController.getBestSellingCategories)
+
+
 
 
 
