@@ -12,10 +12,10 @@ authRouter.get("/google",passport.authenticate("google", { scope: ["profile", "e
 authRouter.get("/google/callback", passport.authenticate("google", { session: false }),authController.googleVerifyCallback)
 
 
-authRouter.post("/auth/signup/requestotp",authController.requestSignupOtp)
-authRouter.post("/auth/signup/verifyotp",authController.verifySignupOtp)
-authRouter.post("/auth/login/requestotp",authController.requestLoginOtp)
-authRouter.post("/auth/login/verifyotp",authController.verifyLoginOtp)
+authRouter.post("/auth/requestotp",authController.requestAuthOtp)
+authRouter.post("/auth/verifyotp",authController.verifyAuthOtp)
+// authRouter.post("/auth/login/requestotp",authController.requestLoginOtp)
+// authRouter.post("/auth/login/verifyotp",authController.verifyLoginOtp)
 
 
 

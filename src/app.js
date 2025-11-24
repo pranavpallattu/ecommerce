@@ -10,6 +10,8 @@ const userRouter = require("./routes/userRouter");
 require("./config/passport")
 
 const app=express()
+app.use(express.json())
+
 
 app.use(cors({
   origin:"http://localhost:5173",
@@ -18,7 +20,6 @@ app.use(cors({
 
 app.use(passport.initialize())
 
-app.use(express.json())
 app.use(cookieParser())
 app.use(authRouter)
 app.use(adminRouter)
