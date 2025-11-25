@@ -101,7 +101,7 @@ exports.requestAuthOtp = async (req, res) => {
     // Generate new OTP
     const otp = generateOtp();
 
-    await Otp.create({
+   const newOtpDocument = await Otp.create({
       emailId: normalizedEmail,
       otp,
       attempts: 0,
@@ -109,11 +109,17 @@ exports.requestAuthOtp = async (req, res) => {
 
     await sendOtpEmail(normalizedEmail, otp);
 
+    const expiryTime=new Date(newOtpDocument.createdAt.getTime() + 5 * 60 * 1000);
+    const expiresIn=Math.floor((expiryTime- Date.now())/1000);
+
+
+
     return res.status(200).json({
       success: true,
       message: `OTP sent to ${normalizedEmail}`,
       otp,
-      expiresIn: 300,
+      expiresIn,
+      expiresAt:expiryTime.toISOString()
     });
   } catch (error) {
     console.error("Auth request OTP error:", error);
