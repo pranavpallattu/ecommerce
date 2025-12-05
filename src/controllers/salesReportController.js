@@ -5,14 +5,14 @@ const formatCurrency = require("../utils/formatCurrency");
 
 exports.getSalesReport = async (req, res) => {
   try {
-    const data = await generateSalesReport(req.body);
-    return res
-      .status(200)
-      .json({
-        success: true,
-        message: "Sales report summary fetched successfully",
-        data,
-      });
+    const { filterType = "all", startDate, endDate } = req.query;
+
+    const data = await generateSalesReport({ filterType, startDate, endDate });
+    return res.status(200).json({
+      success: true,
+      message: "Sales report summary fetched successfully",
+      data,
+    });
   } catch (error) {
     console.error("Error fetching sales report:", error);
     return res.status(500).json({ success: false, message: error.message });
@@ -93,6 +93,7 @@ exports.downloadSalesPDF = async (req, res) => {
     doc.text(`Total Revenue:  ${formatCurrency(data.totalAmount)}`);
     doc.text(`Total Discount: ${formatCurrency(data.totalDiscount)}`);
     doc.text(`Coupon Deduction: ${formatCurrency(data.couponDeduction)}`);
+    doc.text(`Total Refunded: ${formatCurrency(data.totalRefunded)}`);
 
     doc.moveDown(1);
 
@@ -181,6 +182,8 @@ exports.downloadSalesExcel = async (req, res) => {
     sheet.addRow(["Total Revenue", `₹${data.totalAmount}`]);
     sheet.addRow(["Total Discount", `₹${data.totalDiscount}`]);
     sheet.addRow(["Coupon Deduction", `₹${data.couponDeduction}`]);
+    sheet.addRow(["Total Refunded", `₹${data.totalRefunded}`]);
+
     sheet.addRow([]);
 
     // ---------- STATUS TABLE ----------

@@ -90,7 +90,9 @@ exports.requestAuthOtp = async (req, res) => {
         const wait = Math.ceil(60 - seconds);
         return res.status(429).json({
           success: false,
-          message: `Please wait ${wait} second${wait !== 1 ? "s" : ""} before requesting a new OTP.`,
+          message: `Please wait ${wait} second${
+            wait !== 1 ? "s" : ""
+          } before requesting a new OTP.`,
           retryAfter: wait,
         });
       }
@@ -101,7 +103,7 @@ exports.requestAuthOtp = async (req, res) => {
     // Generate new OTP
     const otp = generateOtp();
 
-   const newOtpDocument = await Otp.create({
+    const newOtpDocument = await Otp.create({
       emailId: normalizedEmail,
       otp,
       attempts: 0,
@@ -109,17 +111,17 @@ exports.requestAuthOtp = async (req, res) => {
 
     await sendOtpEmail(normalizedEmail, otp);
 
-    const expiryTime=new Date(newOtpDocument.createdAt.getTime() + 5 * 60 * 1000);
-    const expiresIn=Math.floor((expiryTime- Date.now())/1000);
-
-
+    const expiryTime = new Date(
+      newOtpDocument.createdAt.getTime() + 5 * 60 * 1000
+    );
+    const expiresIn = Math.floor((expiryTime - Date.now()) / 1000);
 
     return res.status(200).json({
       success: true,
       message: `OTP sent to ${normalizedEmail}`,
       otp,
       expiresIn,
-      expiresAt:expiryTime.toISOString()
+      expiresAt: expiryTime.toISOString(),
     });
   } catch (error) {
     console.error("Auth request OTP error:", error);
@@ -147,7 +149,7 @@ exports.verifyAuthOtp = async (req, res) => {
 
     const existingOtp = await Otp.findOne({ emailId: normalizedEmail });
     console.log(existingOtp);
-    
+
     if (!existingOtp) {
       return res.status(401).json({
         success: false,
@@ -206,8 +208,8 @@ exports.verifyAuthOtp = async (req, res) => {
         success: true,
         message: "Login successful",
         data: {
-          _id: user._id,
-          emailId: user.emailId,
+          user,
+          role: user.role,
           isAdmin: user.isAdmin,
         },
       });
@@ -237,12 +239,11 @@ exports.verifyAuthOtp = async (req, res) => {
       success: true,
       message: "Signup successful",
       data: {
-        _id: user._id,
-        emailId: user.emailId,
+        user,
+        role: user.role,
         isAdmin: false,
       },
     });
-
   } catch (error) {
     console.error("Verify authentication OTP error:", error);
     return res.status(500).json({
@@ -263,4 +264,3 @@ exports.logoutController = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
-

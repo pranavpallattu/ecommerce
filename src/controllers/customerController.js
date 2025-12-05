@@ -10,19 +10,40 @@ exports.getAllCustomersController = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const customers = await User.find({
-      isAdmin: { $ne: true },
+      isAdmin: false,
+      deletedAt: { $exists: false },
       $or: [
         { name: { $regex: ".*" + search + ".*", $options: "i" } },
         { emailId: { $regex: ".*" + search + ".*", $options: "i" } },
+        { phone: { $regex: ".*" + search + ".*", $options: "i" } },
       ],
     })
       .sort({ _id: -1 })
       .skip(skip)
       .limit(limit)
-      .select("name emailId");
-    return res.json({ message: "All customers data", data: customers });
+      .select("name emailId phone");
+
+    const totalCustomers = await User.countDocuments({
+      isAdmin: false,
+      deletedAt: { $exists: false },
+    });
+    const totalPages = Math.ceil(totalCustomers / limit);
+
+    return res.json({
+      success: true,
+      message: "All customers data",
+      data: customers,
+      pagination: {
+        totalCustomers,
+        totalPages,
+        currentPage: page,
+        limit,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+    });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -31,18 +52,28 @@ exports.updateUserStatusController = async (req, res) => {
     const { id } = req.params;
 
     const user = await User.findById(id);
-    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+
+    if (user.isAdmin) {
+      return res
+        .status(403)
+        .json({ success: false, message: "Cannot block admin account" });
+    }
 
     user.isBlocked = !user.isBlocked;
     await user.save();
 
-    return res
-      .status(201)
-      .json({
-        message: `user is  ${user.isBlocked ? "blocked" :  "unblocked"} successfully`,
-        data: user,
-      });
+    return res.status(200).json({
+      success: true,
+      message: `user is  ${
+        user.isBlocked ? "blocked" : "unblocked"
+      } successfully`,
+      data: user,
+    });
   } catch (error) {
-    return res.status(500).json({ message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };

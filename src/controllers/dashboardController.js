@@ -10,11 +10,23 @@ exports.getOrderSummary = async (req, res) => {
   try {
     let { startDate, endDate, filterType } = req.query;
 
-    if(!filterType) filterType="all"
+    const allowedFilterTypes = [
+      "all",
+      "daily",
+      "week",
+      "month",
+      "year",
+      "custom",
+    ];
 
+    if (!allowedFilterTypes.includes(filterType)) {
+      return res.status(400).json({success:false,message:"Invalid filter type"})
+    }
+
+    if (!filterType) filterType = "all";
 
     // Auto-date selection
-    if (filterType === "today") {
+    if (filterType === "daily") {
       startDate = dayjs().startOf("day").toDate();
       endDate = dayjs().endOf("day").toDate();
     } else if (filterType === "week") {
@@ -23,9 +35,12 @@ exports.getOrderSummary = async (req, res) => {
     } else if (filterType === "month") {
       startDate = dayjs().startOf("month").toDate();
       endDate = dayjs().endOf("month").toDate();
+    } else if (filterType === "year") {
+      startDate = dayjs().startOf("year").toDate();
+      endDate = dayjs().endOf("year").toDate();
     } else if (filterType === "all") {
-      startDate = new Date(0); 
-      endDate = new Date(); 
+      startDate = new Date(0);
+      endDate = new Date();
     } else {
       // custom date range
       if (!dayjs(startDate).isValid() || !dayjs(endDate).isValid()) {
@@ -42,19 +57,32 @@ exports.getOrderSummary = async (req, res) => {
     const orderSummary = await Order.aggregate([
       {
         $match: {
-          createdAt: { $gte: startDate, $lte: endDate }
-        }
+          createdAt: { $gte: startDate, $lte: endDate },
+        },
       },
       {
         $group: {
           _id: "$orderStatus",
-          count: { $sum: 1 }
-        }
-      }
+          count: { $sum: 1 },
+        },
+      },
     ]);
+
+      // Fetch orders
+      const orders = await Order.find({
+        createdAt: { $gte: startDate, $lte: endDate },
+      }).populate("items.productId");
+
+         const totalAmount = orders.reduce(
+    (sum, order) => sum + (order.grandTotal || 0),
+    0
+  );
+
+
 
     // -------- Default Summary ----------
     const summary = {
+      totalAmount,
       totalOrders: 0,
       delivered: 0,
       processing: 0,
@@ -75,6 +103,8 @@ exports.getOrderSummary = async (req, res) => {
       summary[item._id.toLowerCase()] = item.count;
     });
 
+   
+
     const formatDate = (date) => dayjs(date).format("DD/MM/YYYY hh:mm A");
 
     return res.status(200).json({
@@ -82,7 +112,7 @@ exports.getOrderSummary = async (req, res) => {
       filterType,
       startDate: formatDate(startDate),
       endDate: formatDate(endDate),
-      data: summary
+      data: summary,
     });
   } catch (error) {
     console.error("Error fetching order summary:", error);
@@ -124,74 +154,67 @@ exports.getBestSellingProducts = async (req, res) => {
       },
     ]);
 
-    return res
-      .status(200)
-      .json({
-        success: true,
-        message: "Best selling products fetched successfully",
-        data: bestProducts,
-      });
+    return res.status(200).json({
+      success: true,
+      message: "Best selling products fetched successfully",
+      data: bestProducts,
+    });
   } catch (error) {
     console.error("Error fetching order summary:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-
-exports.getBestSellingCategories=async(req,res)=>{
-
-    try{
-
-        const bestCategories=await Order.aggregate([
-            {$unwind : "$items"},
-             {
+exports.getBestSellingCategories = async (req, res) => {
+  try {
+    const bestCategories = await Order.aggregate([
+      { $unwind: "$items" },
+      {
         $lookup: {
           from: "products",
           localField: "items.productId",
           foreignField: "_id",
-          as: "product"
-        }
+          as: "product",
+        },
       },
-      {$unwind : "$product"},
-       {
+      { $unwind: "$product" },
+      {
         $group: {
           _id: "$product.category",
-          totalSold: { $sum: "$items.quantity" }
-        }
+          totalSold: { $sum: "$items.quantity" },
+        },
       },
 
-        { $sort: { totalSold: -1 } },
+      { $sort: { totalSold: -1 } },
       { $limit: 10 },
 
-            {
+      {
         $lookup: {
           from: "categories",
           localField: "_id",
           foreignField: "_id",
-          as: "category"
-        }
+          as: "category",
+        },
       },
       { $unwind: "$category" },
 
-        {
+      {
         $project: {
           _id: 0,
           categoryId: "$_id",
           name: "$category.name",
-          totalSold: 1
-        }
-      }
+          totalSold: 1,
+        },
+      },
     ]);
 
     res.status(200).json({
       success: true,
-      message:"best categories fetched successfully",
-      data: bestCategories
+      message: "best categories fetched successfully",
+      data: bestCategories,
     });
-
-    }
-    catch (error) {
+  } catch (error) {
     console.error("Error fetching best categories:", error);
     return res.status(500).json({ success: false, message: error.message });
   }
-}
+};

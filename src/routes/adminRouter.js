@@ -14,16 +14,29 @@ const dashboardController=require("../controllers/dashboardController")
 const {adminAuthMiddleware}=require("../middlewares/authMiddleware")
 const upload = require("../middlewares/multerMiddleware")
 
-adminRouter.post("/addCategory",adminAuthMiddleware,categoryController.addCategoryController)
+adminRouter.post("/category/add",adminAuthMiddleware,categoryController.addCategoryController)
 adminRouter.patch("/category/edit/:id",adminAuthMiddleware,categoryController.editCategoryController)
-adminRouter.post("/category/listCategory/:id",adminAuthMiddleware,categoryController.listCategoryController)
-adminRouter.post("/category/unlistCategory/:id",adminAuthMiddleware,categoryController.unListCategoryController)
+adminRouter.post("/category/list/:id",adminAuthMiddleware,categoryController.listCategoryController)
+adminRouter.post("/category/unlist/:id",adminAuthMiddleware,categoryController.unListCategoryController)
 adminRouter.patch("/category/softDelete/:id",adminAuthMiddleware,categoryController.softDeleteCategoryController)
-adminRouter.get("/category/getAllCategory",adminAuthMiddleware,categoryController.getAllCategoriesController)
-adminRouter.post("/product/addProduct",adminAuthMiddleware,upload.fields([{ name: "productImage", maxCount: 4 }]),productController.addProductController)
-adminRouter.put("/product/editProduct/:id",adminAuthMiddleware,upload.fields([{name:"productImage",maxCount:4}]),productController.editProductController)
-adminRouter.post("/admin/allCustomers",adminAuthMiddleware, customerController.getAllCustomersController)
+adminRouter.get("/category/getCategory",adminAuthMiddleware,categoryController.getCategoriesController)
+
+adminRouter.post("/product/addProduct",adminAuthMiddleware,upload.fields([{ name: "productImage", maxCount: 4 }]),productController.addProduct)
+adminRouter.patch("/product/editProduct/:id",adminAuthMiddleware,upload.fields([{name:"productImage",maxCount:4}]),productController.editProduct)
+adminRouter.get("/product/:id",adminAuthMiddleware,productController.getProduct)
+adminRouter.patch("/product/list/:id",adminAuthMiddleware,productController.listProduct)
+adminRouter.patch("/product/unlist/:id",adminAuthMiddleware,productController.unListProduct)
+adminRouter.get("/products",adminAuthMiddleware,productController.getProducts)
+adminRouter.delete("/product/delete/:id",adminAuthMiddleware,productController.softDeleteProduct)
+
+
+
+
+
+adminRouter.get("/admin/customers",adminAuthMiddleware, customerController.getAllCustomersController)
 adminRouter.patch("/admin/user/:id",adminAuthMiddleware,customerController.updateUserStatusController)
+
+
 adminRouter.post("/admin/add-coupon",adminAuthMiddleware,couponController.addCouponController)
 adminRouter.patch("/admin/coupon/:id",adminAuthMiddleware,couponController.updateCouponStatusController)
 adminRouter.patch("/admin/coupon/edit/:id",adminAuthMiddleware,couponController.editCouponController)
@@ -42,6 +55,8 @@ adminRouter.get("/admin/getsalesreport",adminAuthMiddleware,salesReportControlle
 
 adminRouter.post("/admin/report/pdf",adminAuthMiddleware,salesReportController.downloadSalesPDF)
 adminRouter.post("/admin/report/excel",adminAuthMiddleware,salesReportController.downloadSalesExcel)
+
+
 adminRouter.get("/admin/ordersummary",adminAuthMiddleware,dashboardController.getOrderSummary)
 adminRouter.get("/admin/bestsellingproducts",adminAuthMiddleware,dashboardController.getBestSellingProducts)
 adminRouter.get("/admin/bestsellingcategories",adminAuthMiddleware,dashboardController.getBestSellingCategories)

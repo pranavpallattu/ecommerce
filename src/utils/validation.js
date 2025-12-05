@@ -13,41 +13,64 @@ function validateSignUpData(req) {
 }
 
 function validateCategoryData(req) {
-  let pattern = /^[a-z\s]+$/i;
-  const { name, description, offer } = req.body;
-  if (!name || !description || !offer) {
-    throw new Error("please fill the form");
-  } else if (!pattern.test(name) || name.length < 3) {
-    throw new Error(
-      "name should contain only letters and spaces and should not be less than 3 letters"
-    );
-  } else if (!description || description.length < 10) {
-    throw new Error(
-      "Category description should contain only letters and spaces and should not be less than 10 letters"
-    );
-  } else if (!offer || offer < 0 || offer > 100) {
-    throw new Error("offer must be a number between 0 and 100");
-  }
-}
-
-function validateEditCategoryData(req) {
-  let pattern = /^[a-z\s]+$/i;
   const { name, description, offer } = req.body;
 
-  if (name && (!pattern.test(name) || name.length < 3)) {
-    throw new Error(
-      "name should contain only letters and spaces and should not be less than 3 letters"
-    );
+  // 1. Required fields
+  if (!name?.trim()) {
+    throw new Error("Category name is required");
   }
-  if (description && description.length < 10) {
-    throw new Error(
-      "Category description should contain only letters and spaces and should not be less than 10 letters"
-    );
+  if (!description?.trim()) {
+    throw new Error("Category description is required");
   }
-  if (offer !== undefined && (offer < 0 || offer > 100)) {
-    throw new Error("offer must be a number between 0 and 100");
+
+  // 2. Name: letters + spaces only, min 3 chars
+  const namePattern = /^[A-Za-z\s]+$/;
+  if (!namePattern.test(name.trim())) {
+    throw new Error("Category name can only contain letters and spaces");
   }
+  if (name.trim().length < 3) {
+    throw new Error("Category name must be at least 3 characters long");
+  }
+
+  // 3. Description: min 10 characters
+  if (description.trim().length < 10) {
+    throw new Error("Description must be at least 10 characters long");
+  }
+
+  // 4. Offer: optional, but if provided → must be 0–100
+  if (offer !== undefined && offer !== null && offer !== "") {
+    const offerNum = Number(offer);
+    if (isNaN(offerNum) || offerNum < 0 || offerNum > 100) {
+      throw new Error("Offer must be a number between 0 and 100");
+    }
+  }
+
+  // All good → return cleaned data
+  return {
+    name: name.trim(),
+    description: description.trim(),
+    offer: offer ? Number(offer) : null,
+  };
 }
+
+// function validateEditCategoryData(req) {
+//   let pattern = /^[a-z\s]+$/i;
+//   const { name, description, offer } = req.body;
+
+//   if (name && (!pattern.test(name) || name.length < 3)) {
+//     throw new Error(
+//       "name should contain only letters and spaces and should not be less than 3 letters"
+//     );
+//   }
+//   if (description && description.length < 10) {
+//     throw new Error(
+//       "Category description should contain only letters and spaces and should not be less than 10 letters"
+//     );
+//   }
+//   if (offer !== undefined && (offer < 0 || offer > 100)) {
+//     throw new Error("offer must be a number between 0 and 100");
+//   }
+// }
 
 function validateProductData(req) {
   let pattern = /^[a-z0-9\s\-()]+$/i;
@@ -649,7 +672,7 @@ function validateEditAddressData(editAddressData) {
 module.exports = {
   validateSignUpData,
   validateCategoryData,
-  validateEditCategoryData,
+  // validateEditCategoryData,
   validateProductData,
   validateEditProductData,
   validateCouponData,

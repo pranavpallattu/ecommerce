@@ -5,10 +5,16 @@ const advancedFormat = require("dayjs/plugin/advancedFormat");
 
 dayjs.extend(isoWeek);
 dayjs.extend(advancedFormat);
-const generateSalesReport = async ({ startDate, endDate, filterType }) => {
 
-  // Auto-date selection
-  if (filterType === "today") {
+const generateSalesReport = async ({ filterType, startDate, endDate }) => {
+  const allowedFilterTypes = ["all", "daily", "week", "month", "year", "custom"];
+
+  if (!allowedFilterTypes.includes(filterType)) {
+    throw new Error("Invalid filter type");
+  }
+
+  // Auto-date filters
+  if (filterType === "daily") {
     startDate = dayjs().startOf("day").toDate();
     endDate = dayjs().endOf("day").toDate();
   } else if (filterType === "week") {
@@ -17,16 +23,16 @@ const generateSalesReport = async ({ startDate, endDate, filterType }) => {
   } else if (filterType === "month") {
     startDate = dayjs().startOf("month").toDate();
     endDate = dayjs().endOf("month").toDate();
+  } else if (filterType === "year") {
+    startDate = dayjs().startOf("year").toDate();
+    endDate = dayjs().endOf("year").toDate();
   } else if (filterType === "all") {
-    startDate = new Date(0); // 1970
-    endDate = new Date(); // now
+    startDate = new Date(0);
+    endDate = new Date();
   } else {
-    // Custom date range
+    // Custom filter
     if (!dayjs(startDate).isValid() || !dayjs(endDate).isValid()) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid custom date range",
-      });
+      throw new Error("Invalid custom date range");
     }
 
     startDate = dayjs(startDate).startOf("day").toDate();
@@ -38,7 +44,7 @@ const generateSalesReport = async ({ startDate, endDate, filterType }) => {
     createdAt: { $gte: startDate, $lte: endDate },
   }).populate("items.productId");
 
-  // Calculations
+  // Summary Calculations
   const totalOrders = orders.length;
 
   const totalAmount = orders.reduce(
@@ -46,49 +52,58 @@ const generateSalesReport = async ({ startDate, endDate, filterType }) => {
     0
   );
 
-// Calculate total discount from all order items
-const totalDiscount = orders.reduce((sum, order) => {
-  const orderDiscount = order.items.reduce((itemSum, item) => {
-    const regularPrice = item.productId?.regularPrice || 0;
-    const salePrice = item.productId?.salePrice || 0;
-    const discount = (regularPrice - salePrice) * item.quantity;
-    return itemSum + (discount > 0 ? discount : 0);
+  // Calculate product discounts
+  const totalDiscount = orders.reduce((sum, order) => {
+    const orderDiscount = order.items.reduce((itemSum, item) => {
+      const regular = item.productId?.regularPrice || 0;
+      const sale = item.productId?.salePrice || 0;
+      const discount = (regular - sale) * item.quantity;
+      return itemSum + (discount > 0 ? discount : 0);
+    }, 0);
+
+    return sum + orderDiscount;
   }, 0);
-  return sum + orderDiscount;
-}, 0);
 
   const couponDeduction = orders.reduce(
     (sum, order) => sum + (order.discount || 0),
     0
   );
 
-  const delivered = orders.filter((o) => o.orderStatus === "Delivered").length;
-  const cancelled = orders.filter((o) => o.orderStatus === "Cancelled").length;
-  const shipped = orders.filter((o) => o.orderStatus === "Shipped").length;
-  const returned = orders.filter((o) => o.orderStatus === "Returned").length;
-  const pending = orders.filter((o) => o.orderStatus === "Pending").length;
-  const processing = orders.filter(
-    (o) => o.orderStatus === "Processing"
-  ).length;
+const totalRefunded = orders.reduce((sum, order) => {
+  const refundTotal = (order.refunds || []).reduce(
+    (rSum, refund) => rSum + (refund.amount || 0),
+    0
+  );
 
-  const formatDate = (date) => dayjs(date).format("DD/MM/YYYY hh:mm A");
+  return sum + refundTotal;
+}, 0);
 
+  // Order statuses
+  const delivered = orders.filter(o => o.orderStatus === "Delivered").length;
+  const cancelled = orders.filter(o => o.orderStatus === "Cancelled").length;
+  const shipped = orders.filter(o => o.orderStatus === "Shipped").length;
+  const returned = orders.filter(o => o.orderStatus === "Returned").length;
+  const pending = orders.filter(o => o.orderStatus === "Pending").length;
+  const processing = orders.filter(o => o.orderStatus === "Processing").length;
+
+  const formatDate = date => dayjs(date).format("DD/MM/YYYY hh:mm A");
 
   return {
-      totalOrders,
-      totalAmount,
-      totalDiscount,
-      couponDeduction,
-      delivered,
-      cancelled,
-      shipped,
-      returned,
-      pending,
-      processing,
-      filterType,
-      startDate:formatDate(startDate),
-      endDate:formatDate(endDate),
+    totalOrders,
+    totalAmount,
+    totalDiscount,
+    couponDeduction,
+    totalRefunded,
+    delivered,
+    cancelled,
+    shipped,
+    returned,
+    pending,
+    processing,
+    filterType,
+    startDate: formatDate(startDate),
+    endDate: formatDate(endDate),
   };
 };
 
-module.exports=generateSalesReport
+module.exports = generateSalesReport;
