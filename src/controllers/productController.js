@@ -455,6 +455,8 @@ async function uploadFilesToSupabase(files = [], baseName = "img") {
       .upload(fileName, processed, { contentType: "image/webp", upsert: false });
 
     if (uploadError) {
+      console.log(uploadError);
+      
       // If any upload fails, attempt to clean up previous successful uploads
       if (uploadedFileNames.length > 0) {
         try { await supabase.storage.from(bucketName).remove(uploadedFileNames); } catch (e) { /* ignore */ }
@@ -499,7 +501,9 @@ function calculateSalePrice(regularPriceRaw, categoryOfferRaw = 0, productOfferR
 exports.addProduct = async (req, res) => {
   try {
     // Validate incoming fields (preferably validateProductData checks req.body)
-    validateProductData(req.body);
+validateProductData(req, "add");
+
+    // console.log(req)
 
     const {
       productName: rawName,
@@ -565,7 +569,7 @@ exports.editProduct = async (req, res) => {
     const { id } = req.params;
     if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid product id" });
 
-    validateEditProductData(req.body);
+    validateProductData(req,"edit");
 
     const product = await Product.findById(id);
     if (!product) return res.status(404).json({ message: "Product not found" });

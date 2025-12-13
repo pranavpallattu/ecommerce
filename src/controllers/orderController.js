@@ -39,8 +39,7 @@ exports.listOrders = async (req, res) => {
     const [orders, totalOrders] = await Promise.all([
       Order.find(query)
         .populate("userId", "name emailId")
-        .populate("items.productId", "productName  price")
-        .select("userId items grandTotal paymentMethod orderStatus createdAt")
+        .populate("items.productId", "productName productImage price")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
@@ -71,7 +70,7 @@ exports.viewOrder = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
       return res
         .status(400)
-        .json({ success: fale, message: "Invalid orderId" });
+        .json({ success: false, message: "Invalid orderId" });
     }
 
     const order = await Order.findById(orderId)
@@ -82,7 +81,6 @@ exports.viewOrder = async (req, res) => {
         .status(409)
         .json({ success: false, message: "Order not found" });
     }
-
     return res.status(200).json({
       success: true,
       message: "Order fetched successfully",
@@ -824,5 +822,60 @@ exports.itemReturnApprove = async (req, res) => {
     return res.status(status).json({ success: false, message: error.message });
   } finally {
     await session.endSession();
+  }
+};
+
+
+exports.getReturnPendingRequests = async (req, res) => {
+  try {
+    const orders = await Order.find({
+      $or: [
+        { orderStatus: "ReturnPending" },
+        { "items.itemStatus": "ReturnPending" },
+      ],
+    })
+      .populate("userId", "name emailId")
+      .populate("items.productId", "productName price")
+      .sort({ createdAt: -1 });
+
+    const orderReturns = [];
+    const itemReturns = [];
+
+    for (const order of orders) {
+      // FULL ORDER RETURN
+      if (order.orderStatus === "ReturnPending") {
+        orderReturns.push(order);
+      }
+
+      // ITEM RETURNS
+      order.items.forEach((item) => {
+        if (item.itemStatus === "ReturnPending") {
+          itemReturns.push({
+            orderId: order._id,
+            user: order.userId,
+            orderStatus: order.orderStatus,
+            paymentMethod: order.paymentMethod,
+            item,
+            returnReason:item.returnReason,
+            createdAt: order.createdAt,
+          });
+        }
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Return pending requests fetched successfully",
+      data: {
+        orderReturns,
+        itemReturns,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching return pending requests", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 };

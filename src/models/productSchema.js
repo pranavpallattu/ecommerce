@@ -81,17 +81,27 @@ productSchema.pre("save",function(next){
     next()
 })
 
-productSchema.pre("findOneAndUpdate",function(next){
-    const update=this.getUpdate()
-    if(update.quantity<=0 || update.isActive==false ){
-        update.status="Out of stock"
-    }
-    else if(update.quantity>0 && update.isActive==true){
-        update.status="Available"
-    }
-    this.setUpdate(update)
-    next()
-})
+productSchema.pre("findOneAndUpdate", async function (next) {
+  const update = this.getUpdate();
+  
+  // Fetch the existing document
+  const product = await this.model.findOne(this.getQuery());
+
+  // Merge existing values with new updates
+  const newQuantity = update.quantity ?? product.quantity;
+  const newIsActive = update.isActive ?? product.isActive;
+
+  // Apply status logic
+  if (!newIsActive || newQuantity <= 0) {
+    update.status = "Out of stock";
+  } else {
+    update.status = "Available";
+  }
+
+  this.setUpdate(update);
+  next();
+});
+
 
 
 const Product=mongoose.model("Product",productSchema)

@@ -22,7 +22,7 @@ adminRouter.patch("/category/softDelete/:id",adminAuthMiddleware,categoryControl
 adminRouter.get("/category/getCategory",adminAuthMiddleware,categoryController.getCategoriesController)
 
 adminRouter.post("/product/addProduct",adminAuthMiddleware,upload.fields([{ name: "productImage", maxCount: 4 }]),productController.addProduct)
-adminRouter.patch("/product/editProduct/:id",adminAuthMiddleware,upload.fields([{name:"productImage",maxCount:4}]),productController.editProduct)
+adminRouter.put("/product/editProduct/:id",adminAuthMiddleware,upload.fields([{name:"productImage",maxCount:4}]),productController.editProduct)
 adminRouter.get("/product/:id",adminAuthMiddleware,productController.getProduct)
 adminRouter.patch("/product/list/:id",adminAuthMiddleware,productController.listProduct)
 adminRouter.patch("/product/unlist/:id",adminAuthMiddleware,productController.unListProduct)
@@ -37,29 +37,69 @@ adminRouter.get("/admin/customers",adminAuthMiddleware, customerController.getAl
 adminRouter.patch("/admin/user/:id",adminAuthMiddleware,customerController.updateUserStatusController)
 
 
-adminRouter.post("/admin/add-coupon",adminAuthMiddleware,couponController.addCouponController)
-adminRouter.patch("/admin/coupon/:id",adminAuthMiddleware,couponController.updateCouponStatusController)
-adminRouter.patch("/admin/coupon/edit/:id",adminAuthMiddleware,couponController.editCouponController)
+// CREATE
+adminRouter.post("/admin/coupons", adminAuthMiddleware, couponController.addCouponController);
+
+// READ (ALL)
+adminRouter.get("/admin/coupons", adminAuthMiddleware, couponController.getCouponController);
+
+// UPDATE STATUS (activate / deactivate)
+adminRouter.patch("/admin/coupons/:id/status", adminAuthMiddleware, couponController.updateCouponStatusController);
+
+// EDIT COUPON DETAILS
+adminRouter.patch( "/admin/coupons/:id", adminAuthMiddleware, couponController.editCouponController);
+
+// SOFT DELETE
+adminRouter.delete( "/admin/coupons/:id", adminAuthMiddleware, couponController.softDeleteCouponController);
+
+
+
+
+
+
 adminRouter.get("/admin/orders",adminAuthMiddleware,orderController.listOrders)
 
 adminRouter.patch("/admin/orders/return/reject/:orderId/:itemId",adminAuthMiddleware,orderController.itemReturnReject);
 
 
 adminRouter.get("/admin/orders/:orderId",adminAuthMiddleware,orderController.viewOrder);
-adminRouter.post("/admin/orders/:orderId",adminAuthMiddleware,orderController.orderStatus);
-adminRouter.post("/admin/orders/return/approve/:orderId",adminAuthMiddleware,orderController.orderReturnApprove);
-// adminRouter.patch("/admin/orders/return/reject/:orderId",adminAuthMiddleware,orderController.orderReturnReject);
+adminRouter.patch("/admin/orders/:orderId",adminAuthMiddleware,orderController.orderStatus);
+
+
+// ORDER RETURNS
+adminRouter.patch("/admin/orders/:orderId/return/approve", adminAuthMiddleware, orderController.orderReturnApprove);
+
+adminRouter.patch("/admin/orders/:orderId/return/reject", adminAuthMiddleware, orderController.orderReturnReject);
+
+// ITEM RETURNS
+adminRouter.patch("/admin/orders/:orderId/items/:itemId/return/approve", adminAuthMiddleware, orderController.itemReturnApprove);
+
+adminRouter.patch("/admin/orders/:orderId/items/:itemId/return/reject", adminAuthMiddleware, orderController.itemReturnReject);
+
+// NOTIFICATIONS (RETURN REQUESTS)
+adminRouter.get("/admin/notifications/returns", adminAuthMiddleware, orderController.getReturnPendingRequests);
+
+
+
+
+
+
+
+
 
 
 adminRouter.get("/admin/getsalesreport",adminAuthMiddleware,salesReportController.getSalesReport)
-
 adminRouter.post("/admin/report/pdf",adminAuthMiddleware,salesReportController.downloadSalesPDF)
 adminRouter.post("/admin/report/excel",adminAuthMiddleware,salesReportController.downloadSalesExcel)
+
+
+
 
 
 adminRouter.get("/admin/ordersummary",adminAuthMiddleware,dashboardController.getOrderSummary)
 adminRouter.get("/admin/bestsellingproducts",adminAuthMiddleware,dashboardController.getBestSellingProducts)
 adminRouter.get("/admin/bestsellingcategories",adminAuthMiddleware,dashboardController.getBestSellingCategories)
+
 
 
 

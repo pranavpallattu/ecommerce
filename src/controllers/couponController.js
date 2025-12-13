@@ -133,7 +133,7 @@ exports.editCouponController = async (req, res) => {
     }
 
     if (
-      updateData.discountType  !== undefined) {
+      updateData.discountType  !== undefined && updateData.discountType !== existingCoupon.discountType) {
       return res.status(400).json({
         success: false,
         message:
