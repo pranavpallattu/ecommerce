@@ -20,6 +20,8 @@ exports.getHomeProductsController = async (req, res) => {
           )
           .limit(3);
 
+          if(products.length === 0) return null;
+
         return {
           categoryName: categoryItem.name,
           categoryId: categoryItem._id,
@@ -29,37 +31,51 @@ exports.getHomeProductsController = async (req, res) => {
       })
     );
 
+    console.log(categoryProducts);
+
+    const filteredCategories = categoryProducts.filter(Boolean);  
+
     res.status(200).json({
       success: true,
       message: "products for home page retrieved successfully",
-      data: categoryProducts,
+      data: filteredCategories,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
+
+
 exports.getShopProductsController = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    let limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
-    const category= req.query.category || "all"
-    const sortOption= req.query.sort || "default"
 
-    const categoryFilter = category !== "all"
-      ? { category: category }
-      : {};
+    const category = req.query.category || "all";
+    const sortOption = req.query.sort || "default";
+    const search = req.query.search?.trim();
 
+    const filters = {
+      isActive: true,
+      deletedAt: null,
+    };
 
-    const filters={
-      isActive:true,
-      deletedAt:null,
-      ...categoryFilter,
+    // Category filter
+    if (category !== "all") {
+      filters.category = category;
+    }
+
+    // Search filter
+    if (search) {
+      filters.$or = [
+        { productName: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+      ];
     }
 
     let sortQuery = {};
-
     switch (sortOption) {
       case "priceLowToHigh":
         sortQuery = { salePrice: 1 };
@@ -76,27 +92,43 @@ exports.getShopProductsController = async (req, res) => {
       case "nameZtoA":
         sortQuery = { productName: -1 };
         break;
-
-      default : 
-      sortQuery = {createdAt : -1}
+      default:
+        sortQuery = { createdAt: -1 };
     }
 
-    // fetch total product and total pages for pagination
-    const totalProducts= await Product.countDocuments(filters)
+    const totalProducts = await Product.countDocuments(filters);
+    const totalPages = Math.ceil(totalProducts / limit);
 
-    const totalPages= Math.ceil(totalProducts / limit)
+    const products = await Product.find(filters)
+      .populate("category", "name offer")
+      .sort(sortQuery)
+      .skip(skip)
+      .limit(limit);
 
-    // fetch products with pagination
+    const categories = await Category.find({
+      isActive: true,
+      deletedAt: null,
+    });
 
-    const products=await Product.find(filters).populate("category", "name").sort(sortQuery).skip(skip).limit(limit)
-
-    // categories for filter options
-    const categories = await Category.find({isActive:true, deletedAt:null})
-
-    res.status(200).json({success:true,message : "",data:{totalProducts,totalPages,currentPage:page,products,categories}})
-
+    res.status(200).json({
+      success: true,
+      data: {
+        products,
+        pagination: {
+          totalProducts,
+          totalPages,
+          currentPage: page,
+        },
+        categories,
+        appliedFilters: {
+          category,
+          sort: sortOption,
+          search: search || "",
+        },
+      },
+    });
   } catch (error) {
-   return res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -124,49 +156,118 @@ exports.getProductDetailsController=async(req,res)=>{
 }
 
 
-exports.searchProductsController=async(req,res)=>{
 
-  try{
 
-     const { search } = req.query;
+// exports.getShopProductsController = async (req, res) => {
+//   try {
+//     const page = parseInt(req.query.page) || 1;
+//     let limit = parseInt(req.query.limit) || 10;
+//     const skip = (page - 1) * limit;
+//     const category= req.query.category || "all"
+//     const sortOption= req.query.sort || "default" 
 
-    if (!search || search.trim() === "") {
-      return res.status(200).json({
-        success: false,
-        message: "No search query provided",
-        products: [],
-        count: 0,
-      });
-    }
+//     const categoryFilter = category !== "all"
+//       ? { category: category }
+//       : {};
 
-    const searchQuery = search.trim();
 
-    const activeCategories=await Category.find({
-      isActive:true,
-      deletedAt:null
-    })
+//     const filters={
+//       isActive:true,
+//       deletedAt:null,
+//       ...categoryFilter,
+//     }
 
-    const activeCategoryIds=activeCategories.map(category=> category._id)
+//     let sortQuery = {};
 
-    const products=await Product.find({
-      $or : [
-        {productName : {$regex : searchQuery, $options : "i"}},
-        {description : {$regex : searchQuery, $options : "i"}},
-      ],
-        isActive:true,
-        deletedAt:null,
-        category : {$in : activeCategoryIds}
-    }).populate("category", "name offer").sort({createdAt : -1}).limit(20)
+//     switch (sortOption) {
+//       case "priceLowToHigh":
+//         sortQuery = { salePrice: 1 };
+//         break;
+//       case "priceHighToLow":
+//         sortQuery = { salePrice: -1 };
+//         break;
+//       case "newArrivals":
+//         sortQuery = { createdAt: -1 };
+//         break;
+//       case "nameAtoZ":
+//         sortQuery = { productName: 1 };
+//         break;
+//       case "nameZtoA":
+//         sortQuery = { productName: -1 };
+//         break;
+//       default : 
+//       sortQuery = {createdAt : -1}
+//     }
 
-    res.status(200).json({success:true,message: products.length > 0 
-        ? `Found ${products.length} product${products.length > 1 ? 's' : ''}` 
-        : 'No products found',data:{
-          products,
-          count:products.length,
-          searchQuery
-        }})
-  }
-   catch (error) {
-   return res.status(500).json({ success: false, message: error.message });
-  }
-}
+//     // fetch total product and total pages for pagination
+//     const totalProducts= await Product.countDocuments(filters)
+
+//     const totalPages= Math.ceil(totalProducts / limit)
+
+//     // fetch products with pagination
+
+//     const products=await Product.find(filters).populate("category", "name").sort(sortQuery).skip(skip).limit(limit)
+
+//     // categories for filter options
+//     const categories = await Category.find({isActive:true, deletedAt:null})
+
+//     res.status(200).json({success:true,message : "",data: products,pagination: {totalProducts,totalPages,currentPage:page,categories}})
+
+//   } catch (error) {
+//    return res.status(500).json({ success: false, message: error.message });
+//   }
+// };
+
+
+
+
+
+// exports.searchProductsController=async(req,res)=>{
+
+//   try{
+
+//      const { search } = req.query;
+
+//     if (!search || search.trim() === "") {
+//       return res.status(200).json({
+//         success: false,
+//         message: "No search query provided",
+//         products: [],
+//         count: 0,
+//       });
+//     }
+
+//     const searchQuery = search.trim();
+
+//     const activeCategories=await Category.find({
+//       isActive:true,
+//       deletedAt:null
+//     })
+
+//     const activeCategoryIds=activeCategories.map(category=> category._id)
+
+//     console.log(activeCategoryIds);
+    
+
+//     const products=await Product.find({
+//       $or : [
+//         {productName : {$regex : searchQuery, $options : "i"}},
+//         {description : {$regex : searchQuery, $options : "i"}},
+//       ],
+//         isActive:true,
+//         deletedAt:null,
+//         category : {$in : activeCategoryIds}
+//     }).populate("category", "name offer").sort({createdAt : -1}).limit(20)
+
+//     res.status(200).json({success:true,message: products.length > 0 
+//         ? `Found ${products.length} product${products.length > 1 ? 's' : ''}` 
+//         : 'No products found',data:{
+//           products,
+//           count:products.length,
+//           searchQuery
+//         }})
+//   }
+//    catch (error) {
+//    return res.status(500).json({ success: false, message: error.message });
+//   }
+// }

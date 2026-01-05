@@ -842,12 +842,14 @@ exports.getReturnPendingRequests = async (req, res) => {
     const itemReturns = [];
 
     for (const order of orders) {
-      // FULL ORDER RETURN
+
+      // ✅ CASE 1: FULL ORDER RETURN
       if (order.orderStatus === "ReturnPending") {
         orderReturns.push(order);
+        continue; // ⛔ Skip item-level returns for this order
       }
 
-      // ITEM RETURNS
+      // ✅ CASE 2: ITEM-LEVEL RETURNS ONLY
       order.items.forEach((item) => {
         if (item.itemStatus === "ReturnPending") {
           itemReturns.push({
@@ -856,7 +858,7 @@ exports.getReturnPendingRequests = async (req, res) => {
             orderStatus: order.orderStatus,
             paymentMethod: order.paymentMethod,
             item,
-            returnReason:item.returnReason,
+            returnReason: item.returnReason,
             createdAt: order.createdAt,
           });
         }

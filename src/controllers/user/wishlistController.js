@@ -3,6 +3,28 @@ const Product = require("../../models/productSchema");
 const Wishlist = require("../../models/wishlistSchema");
 const Cart = require("../../models/cartSchema");
 
+exports.getWishlist = async (req, res) => {
+  try {
+    const user = req.user;
+    const wishlist = await Wishlist.findOne({ userId: user._id }).populate("products.product");
+
+    if (!wishlist) {
+      return res.status(200).json({
+        success: true,
+        message: "wishlist is empty",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "wishlist fetched successfully",
+      data: wishlist,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 exports.addToWishlistController = async (req, res) => {
   try {
     const user = req.user;
@@ -49,7 +71,7 @@ exports.addToWishlistController = async (req, res) => {
 
     if (productExists) {
       return res
-        .status(404)
+        .status(409)
         .json({ success: false, message: "Product already in wishlist" });
     }
 
@@ -87,12 +109,10 @@ exports.removeFromWishlist = async (req, res) => {
       (item) => item.product.toString() === productId
     );
     if (!productExistsInWishlist) {
-      return res
-        .status(404)
-        .json({
-          success: false,
-          message: "Product does not exist in wishlist",
-        });
+      return res.status(404).json({
+        success: false,
+        message: "Product does not exist in wishlist",
+      });
     }
 
     wishlist.products = wishlist.products.filter(
@@ -101,15 +121,12 @@ exports.removeFromWishlist = async (req, res) => {
 
     await wishlist.save();
 
-    return res
-      .status(200)
-      .json({
-        success: true,
-        message: "product removed from wishlist",
-        data: wishlist,
-      });
+    return res.status(200).json({
+      success: true,
+      message: "product removed from wishlist",
+      data: wishlist,
+    });
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
-

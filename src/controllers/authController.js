@@ -30,22 +30,46 @@ exports.googleVerifyCallback = async (req, res) => {
       expires: new Date(Date.now() + 8 * 3600000),
     });
 
-    return res.status(200).json({
-      success: true,
-      message: "Login Successful",
-      data: {
-        _id: user._id,
-        name: user.name,
-        emailId: user.emailId,
-        isAdmin: user.isAdmin,
-      },
-    });
+    // return res.status(200).json({
+    //   success: true,
+    //   message: "Login Successful",
+    //   data: {
+    //     _id: user._id,
+    //     name: user.name,
+    //     emailId: user.emailId,
+    //     isAdmin: user.isAdmin,
+    //   },
+    // });
+
+    // role based redirect
+
+    if (user.isAdmin) {
+      return res.redirect(`${process.env.CLIENT_URL}/admin/dashboard`);
+    }
+
+    return res.redirect(`${process.env.CLIENT_URL}/`);
   } catch (error) {
     console.error("Google auth error:", error);
     return res.status(500).json({
       success: false,
       message: "Authentication failed",
     });
+  }
+};
+
+exports.getMe = async (req, res) => {
+  try {
+    return res.status(200).json({
+      success: true,
+      data: {
+        _id: req.user._id,
+        name: req.user.name,
+        emailId: req.user.emailId,
+        isAdmin: req.user.isAdmin,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 

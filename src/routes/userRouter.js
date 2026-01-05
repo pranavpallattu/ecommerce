@@ -12,11 +12,13 @@ const orderController=require("../controllers/user/orderController")
 const {userAuthMiddleware}=require("../middlewares/authMiddleware")
 
 userRouter.get("/home",productController.getHomeProductsController)
-userRouter.get("/shop",productController.getShopProductsController)
+userRouter.get("/products/shop",productController.getShopProductsController)
 userRouter.get("/productDetails/:id",productController.getProductDetailsController)
-userRouter.get("/search",productController.searchProductsController)
+
+
 userRouter.post("/wishlist/:productId",userAuthMiddleware,wishlistController.addToWishlistController)
 userRouter.delete("/wishlist/:productId",userAuthMiddleware,wishlistController.removeFromWishlist)
+userRouter.get("/wishlist",userAuthMiddleware,wishlistController.getWishlist)
 userRouter.post("/addresses",userAuthMiddleware,addressController.addAddressController)
 userRouter.get("/addresses",userAuthMiddleware,addressController.getAddressController)
 userRouter.delete("/addresses/:id",userAuthMiddleware,addressController.softDeleteAddressController)
@@ -44,7 +46,7 @@ userRouter.post("/orders/:orderId/cancel-item",userAuthMiddleware,orderControlle
 userRouter.get("/orders",userAuthMiddleware,orderController.getUserOrders)
 userRouter.get("/order/:orderId",userAuthMiddleware,orderController.getSingleOrder)
 userRouter.post("/orders/return/request/:orderId/:itemId",userAuthMiddleware,orderController.itemReturn)
-// userRouter.post("/orders/return/request/:orderId",userAuthMiddleware,orderController.orderReturn)
+userRouter.post("/orders/return/request/:orderId",userAuthMiddleware,orderController.orderReturn)
 
 
 
