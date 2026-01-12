@@ -9,6 +9,7 @@ const cartController=require("../controllers/user/cartController")
 const couponController=require("../controllers/user/couponController")
 const paymentController=require("../controllers/user/paymentController")
 const orderController=require("../controllers/user/orderController")
+const walletController=require("../controllers/user/walletController")
 const {userAuthMiddleware}=require("../middlewares/authMiddleware")
 
 userRouter.get("/home",productController.getHomeProductsController)
@@ -19,9 +20,13 @@ userRouter.get("/productDetails/:id",productController.getProductDetailsControll
 userRouter.post("/wishlist/:productId",userAuthMiddleware,wishlistController.addToWishlistController)
 userRouter.delete("/wishlist/:productId",userAuthMiddleware,wishlistController.removeFromWishlist)
 userRouter.get("/wishlist",userAuthMiddleware,wishlistController.getWishlist)
+
+
 userRouter.post("/addresses",userAuthMiddleware,addressController.addAddressController)
 userRouter.get("/addresses",userAuthMiddleware,addressController.getAddressController)
 userRouter.delete("/addresses/:id",userAuthMiddleware,addressController.softDeleteAddressController)
+userRouter.patch("/addresses/:id",userAuthMiddleware,addressController.editAddressController)
+
 
 userRouter.post("/cart/applyCoupon",userAuthMiddleware,couponController.applyCoupon)
 userRouter.delete("/cart/removeCoupon",userAuthMiddleware,couponController.removeCoupon)
@@ -29,6 +34,7 @@ userRouter.get("/cart/coupons",userAuthMiddleware,couponController.getCoupons)
 
 
 userRouter.patch("/addresses/:id",userAuthMiddleware,addressController.editAddressController)
+
 userRouter.patch("/cart/updatequantity",userAuthMiddleware,cartController.updateQuantity)
 userRouter.post("/cart/:productId",userAuthMiddleware,cartController.addToCart)
 userRouter.get("/cart",userAuthMiddleware,cartController.getCart)
@@ -48,6 +54,8 @@ userRouter.get("/order/:orderId",userAuthMiddleware,orderController.getSingleOrd
 userRouter.post("/orders/return/request/:orderId/:itemId",userAuthMiddleware,orderController.itemReturn)
 userRouter.post("/orders/return/request/:orderId",userAuthMiddleware,orderController.orderReturn)
 
+
+userRouter.get("/wallet",userAuthMiddleware,walletController.getWalletDetails)
 
 
 

@@ -6,6 +6,8 @@ exports.applyCoupon = async (req, res) => {
   try {
     const user = req.user;
     const { code } = req.body;
+    console.log(code);
+    
 
     if (!code || typeof code !== "string" || code.trim().length === 0) {
       return res.status(400).json({
@@ -102,7 +104,7 @@ exports.applyCoupon = async (req, res) => {
       // update cart
       cart.appliedCoupon = coupon._id;
       cart.discount = discountAmount;
-      cart.finalTotal = cart.subTotal - discountAmount;
+      // cart.finalTotal = cart.subTotal - discountAmount;
       await cart.save({ session });
 
       // update coupon
@@ -132,14 +134,19 @@ exports.applyCoupon = async (req, res) => {
     }
 
     await cart.populate("appliedCoupon");
+    console.log(discountAmount);
 
-    return res.status(200).json({
-      success: true,
-      message: "Coupon applied successfully",
-      data: cart,
-      discountAmount,
-      finalTotal: cart.finalTotal,
-    });
+    console.log(cart);
+    
+    
+
+return res.status(200).json({
+  success: true,
+  message: "Coupon applied successfully",
+  data: cart,
+  discountAmount,
+  finalTotal: cart.finalTotal,
+});
   } catch (error) {
     return res.status(500).json({ success: false, message: error.message });
   }

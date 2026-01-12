@@ -21,15 +21,22 @@ async function revalidateCoupon(cart) {
     return cart;
   }
 
-  //   coupon still valid
+  // Coupon still valid - Calculate discount based on type (FIXED VERSION)
+  let discountAmount = 0;
 
-  const discountAmount = Math.min(
-    (cart.subTotal * coupon.discount) / 100,
-    cart.subTotal
-  );
+  if (coupon.discountType === "percentage") {
+    discountAmount = (cart.subTotal * coupon.discount) / 100;
+  } else {
+    // Fixed amount discount
+    discountAmount = coupon.discount;
+  }
+
+  // Ensure discount doesn't exceed subtotal
+  discountAmount = Math.min(discountAmount, cart.subTotal);
 
   cart.discount = discountAmount;
   cart.finalTotal = Math.max(cart.subTotal - (cart.discount || 0), 0);
+  
   return cart;
 }
 

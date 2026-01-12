@@ -83,6 +83,7 @@ exports.addToWishlistController = async (req, res) => {
       data: wishlist,
     });
   } catch (error) {
+    console.error(error.message)
     return res.status(500).json({ success: false, message: error.message });
   }
 };
