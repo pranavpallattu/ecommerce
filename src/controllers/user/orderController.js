@@ -13,6 +13,8 @@ exports.placeOrder = async (req, res) => {
   await session.startTransaction();
   try {
     const { paymentMethod, address, couponId, couponCode } = req.body;
+    console.log(address);
+    
     console.log(paymentMethod);
     const user = req.user;
 
@@ -437,8 +439,8 @@ exports.cancelSingleItem = async (req, res) => {
   const session = await mongoose.startSession();
   await session.startTransaction();
   try {
-    const { orderId } = req.params;
-    const { itemId, reason } = req.body;
+    const { orderId, itemId } = req.params;
+    const { reason } = req.body;
     const user = req.user;
 
     // validate orderid and itemid

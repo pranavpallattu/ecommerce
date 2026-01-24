@@ -59,6 +59,8 @@ exports.googleVerifyCallback = async (req, res) => {
 
 exports.getMe = async (req, res) => {
   try {
+    console.log(req.user);
+    
     return res.status(200).json({
       success: true,
       data: {
@@ -280,7 +282,6 @@ exports.verifyAuthOtp = async (req, res) => {
 exports.logoutController = async (req, res) => {
   try {
     res.clearCookie("token");
-
     res
       .status(201)
       .json({ success: true, message: "User logged out successfully" });

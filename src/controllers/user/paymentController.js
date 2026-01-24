@@ -10,6 +10,8 @@ const Coupon = require("../../models/couponSchema");
 exports.createOrder = async (req, res) => {
   try {
     const { amount } = req.body;
+    // console.log(req.body);
+    
     const { _id, name, emailId } = req.user;
     if (!amount || typeof amount !== "number" || amount <= 0) {
       return res.status(400).json({
@@ -21,13 +23,16 @@ exports.createOrder = async (req, res) => {
     const order = await razorpayInstance.orders.create({
       amount: Math.round(amount * 100),
       currency: "INR",
-      receipt: `receipt_${_id}_${Date.now()}`,
+      receipt: `receipt_${_id}}`,
       notes: {
         name,
         emailId,
         userId: _id,
       },
     });
+
+    // console.log(order);
+    
 
     return res.status(200).json({
       success: true,
@@ -52,6 +57,9 @@ exports.verifyPayment = async (req, res) => {
       razorpay_signature,
       orderDetails,
     } = req.body;
+
+    console.log(orderDetails);
+    
 
     const user = req.user;
 
@@ -97,10 +105,20 @@ exports.verifyPayment = async (req, res) => {
     );
     let expectedDiscount = 0;
 
-    if (orderDetails.couponId) {
-      const coupon = await Coupon.findById(orderDetails.couponId).session(
+    if (orderDetails?.couponId) {
+
+      if (!mongoose.Types.ObjectId.isValid(orderDetails.couponId)) {
+    const err = new Error("Invalid coupon id format");
+    err.statusCode = 400;
+    throw err;
+  }
+
+      const coupon = await Coupon.findById(orderDetails?.couponId).session(
         session
       );
+
+      console.log(coupon);
+      
 
       if (!coupon || !coupon.isActive) {
         const err = new Error("Invalid or inactive coupon");
@@ -127,45 +145,60 @@ exports.verifyPayment = async (req, res) => {
 
     // Validate amounts
     if (
-      calculatedSubTotal !== orderDetails.subTotal ||
-      expectedDiscount !== orderDetails.discount ||
-      expectedGrandTotal !== orderDetails.grandTotal
+      calculatedSubTotal !== orderDetails?.subTotal ||
+      expectedDiscount !== orderDetails?.discount ||
+      expectedGrandTotal !== orderDetails?.grandTotal
+     
+      
     ) {
+           console.log(calculatedSubTotal, expectedDiscount, expectedGrandTotal);
+           console.log(orderDetails?.subTotal, orderDetails?.discount , orderDetails?.grandTotal );
+           
       const err = new Error("Payment amount tampering detected");
       err.statusCode = 400;
       throw err;
     }
 
+
     // === VALIDATE & DEDUCT STOCK ===
-    for (const item of cart.items) {
-      const product = await Product.findById(item.productId).session(session);
-      if (!product || product.quantity < item.quantity) {
-        const err = new Error(`Insufficient stock for ${item.productName}`);
-        err.statusCode = 400;
-        throw err;
-      }
-      product.quantity -= item.quantity;
-      await product.save({ session });
-    }
+  const orderItems = [];
+
+for (const item of cart.items) {
+  const product = await Product.findById(item.product).session(session);
+
+  if (!product || product.quantity < item.quantity) {
+    const err = new Error(`Insufficient stock for ${product?.productName}`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  // deduct stock
+  product.quantity -= item.quantity;
+  await product.save({ session });
+
+  // build order item snapshot ✅
+  orderItems.push({
+    productId: product._id,
+    productName: product.productName, // ✅ FIXED
+    productImage: product.productImage[0] || null,
+    quantity: item.quantity,
+    price: item.price,
+    subtotal: item.price * item.quantity,
+    itemStatus: "Confirmed",
+  });
+}
+
 
     // save order
     order = new Order({
       userId: user._id,
-      items: cart.items.map((item) => ({
-        productId: item.productId,
-        productName: item.productName,
-        productImage: item.productImage,
-        quantity: item.quantity,
-        price: item.price,
-        subtotal: item.price * item.quantity,
-        itemStatus: "Confirmed",
-      })),
+      items: orderItems,
       address: {
         addressId: orderDetails.address.addressId,
         snapshot: orderDetails.address.snapshot,
       },
-      couponId: orderDetails.couponId,
-      couponCode: orderDetails.couponCode || null,
+      couponId: orderDetails?.couponId,
+      couponCode: orderDetails?.couponCode || null,
       subTotal: calculatedSubTotal, // Align with schema
       discount: expectedDiscount || 0,
       grandTotal: expectedGrandTotal, // Align with schema

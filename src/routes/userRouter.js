@@ -40,8 +40,13 @@ userRouter.post("/cart/:productId",userAuthMiddleware,cartController.addToCart)
 userRouter.get("/cart",userAuthMiddleware,cartController.getCart)
 userRouter.delete("/cart/:productId",userAuthMiddleware,cartController.removeFromCart)
 
-userRouter.post("/payment/create-order",userAuthMiddleware,paymentController.createOrder)
-userRouter.post("/payment/verify-payment",userAuthMiddleware,paymentController.verifyPayment)
+
+
+userRouter.post("/orders/place", userAuthMiddleware, orderController.placeOrder)
+userRouter.post("/orders/razorpay/create",userAuthMiddleware,paymentController.createOrder)
+userRouter.post("/orders/razorpay/verify",userAuthMiddleware,paymentController.verifyPayment)
+
+
 
 userRouter.post("/orders",userAuthMiddleware,orderController.placeOrder)
 
@@ -49,10 +54,15 @@ userRouter.post("/orders",userAuthMiddleware,orderController.placeOrder)
 userRouter.post("/orders/:orderId/cancel-item",userAuthMiddleware,orderController.cancelSingleItem)
 
 
+
 userRouter.get("/orders",userAuthMiddleware,orderController.getUserOrders)
-userRouter.get("/order/:orderId",userAuthMiddleware,orderController.getSingleOrder)
+userRouter.get("/orders/:orderId",userAuthMiddleware,orderController.getSingleOrder)
 userRouter.post("/orders/return/request/:orderId/:itemId",userAuthMiddleware,orderController.itemReturn)
 userRouter.post("/orders/return/request/:orderId",userAuthMiddleware,orderController.orderReturn)
+
+userRouter.post("/orders/cancel/request/:orderId/:itemId",userAuthMiddleware,orderController.cancelSingleItem)
+userRouter.post("/orders/cancel/request/:orderId",userAuthMiddleware,orderController.orderCancel)
+
 
 
 userRouter.get("/wallet",userAuthMiddleware,walletController.getWalletDetails)

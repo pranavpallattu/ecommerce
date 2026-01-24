@@ -39,7 +39,7 @@ const addressSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
-    postalCode: {
+    pincode: {
       type: String,
       required: true,
       trim: true,

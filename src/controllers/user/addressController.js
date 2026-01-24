@@ -15,7 +15,7 @@ exports.addAddressController = async (req, res) => {
       streetAddress,
       city,
       state,
-      postalCode,
+      pincode,
       country,
       landmark,
       isDefault,
@@ -26,7 +26,7 @@ exports.addAddressController = async (req, res) => {
       streetAddress: streetAddress.trim(),
       city: city.trim(),
       state: state.trim(),
-      postalCode: postalCode.trim(),
+      pincode: pincode.trim(),
       country: country.trim(),
     });
 
@@ -61,7 +61,7 @@ exports.addAddressController = async (req, res) => {
       streetAddress,
       city,
       state,
-      postalCode,
+      pincode,
       country,
       landmark,
       isDefault: shouldBeDefault,
@@ -90,7 +90,7 @@ exports.getAddressController = async (req, res) => {
     });
 
     return res.status(200).json({
-      status: true,
+      success: true,
       message: "Addresses retrieved successfully",
       data: addresses,
     });
@@ -122,7 +122,7 @@ exports.softDeleteAddressController = async (req, res) => {
     await address.save();
 
     return res.status(200).json({
-      status: true,
+      success: true,
       message: "Address deleted successfully",
       data: {
         id: address._id,
@@ -136,6 +136,8 @@ exports.softDeleteAddressController = async (req, res) => {
 
 exports.editAddressController = async (req, res) => {
   try {
+    console.log(req.body);
+    
     const { id } = req.params;
     const user = req.user;
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -155,11 +157,20 @@ exports.editAddressController = async (req, res) => {
         .json({ success: false, message: "Address not found" });
     }
 
-    try {
-      validateEditAddressData(req.body);
-    } catch (error) {
-      return res.status(400).json({ success: false, message: error.message });
+      // Convert isDefault string to boolean if needed
+    if (req.body.isDefault !== undefined) {
+      if (req.body.isDefault === "true" || req.body.isDefault === true) {
+        req.body.isDefault = true;
+      } else if (req.body.isDefault === "false" || req.body.isDefault === false) {
+        req.body.isDefault = false;
+      }
     }
+
+    // try {
+    //   validateEditAddressData(req.body);
+    // } catch (error) {
+    //   return res.status(400).json({ success: false, message: error.message });
+    // }
 
     if (req.body.isDefault === true) {
       await Address.updateMany(
@@ -172,8 +183,12 @@ exports.editAddressController = async (req, res) => {
     for (const [key, value] of Object.entries(req.body)) {
       if (value !== undefined) cleanData[key] = value;
     }
+    console.log(cleanData);
+    
 
     Object.assign(existingAddress, cleanData);
+    console.log(existingAddress);
+    
     await existingAddress.save();
 
     return res.status(200).json({

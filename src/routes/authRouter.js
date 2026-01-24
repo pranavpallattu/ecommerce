@@ -18,7 +18,7 @@ authRouter.get(
   authController.googleVerifyCallback
 );
 
-authRouter.get("/me", userAuthMiddleware, authController.getMe);
+authRouter.get("/auth/me", userAuthMiddleware, authController.getMe);
 
 authRouter.post("/auth/requestotp", authController.requestAuthOtp);
 authRouter.post("/auth/verifyotp", authController.verifyAuthOtp);

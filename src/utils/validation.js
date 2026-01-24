@@ -412,9 +412,10 @@ function ValidateAddressData(addressData) {
     streetAddress,
     city,
     state,
-    postalCode,
+    pincode,
     country,
     landmark,
+    isDefault
   } = addressData;
 
   // Validate name
@@ -492,13 +493,13 @@ function ValidateAddressData(addressData) {
     throw new Error("State must contain only letters and spaces");
   }
 
-  // Validate postalCode (Indian PIN code)
-  if (!postalCode) {
-    throw new Error("Postal code is required");
-  } else if (typeof postalCode !== "string") {
-    throw new Error("Postal code must be a string");
-  } else if (!/^[1-9][0-9]{5}$/.test(postalCode.trim())) {
-    throw new Error("Postal code must be a valid 6-digit Indian PIN code");
+  // Validate pincode (Indian PIN code)
+  if (!pincode) {
+    throw new Error("pincode is required");
+  } else if (typeof pincode !== "string") {
+    throw new Error("pincode must be a string");
+  } else if (!/^[1-9][0-9]{5}$/.test(pincode.trim())) {
+    throw new Error("pincode must be a valid 6-digit Indian PIN code");
   }
 
   // Validate country
@@ -521,6 +522,17 @@ function ValidateAddressData(addressData) {
     }
   }
 
+   if (isDefault !== undefined) {
+    // Convert string to boolean if needed
+    if (typeof isDefault === "string") {
+      if (isDefault !== "true" && isDefault !== "false") {
+        throw new Error("isDefault must be a boolean value");
+      }
+    } else if (typeof isDefault !== "boolean") {
+      throw new Error("isDefault must be a boolean value");
+    }
+  }
+
   // // Validate isDefault (optional)
   // if (isDefault !== undefined) {
   //   if (typeof isDefault !== "boolean") {
@@ -540,6 +552,7 @@ function validateEditAddressData(editAddressData) {
     postalCode,
     country,
     landmark,
+    isDefault
   } = editAddressData;
 
   // Validate name ✅ (Already correct)
@@ -692,6 +705,17 @@ function validateEditAddressData(editAddressData) {
     const trimmedLandmark = landmark.trim();
     if (trimmedLandmark.length > 100) {
       throw new Error("Landmark must not exceed 100 characters");
+    }
+  }
+
+   if (isDefault !== undefined) {
+    // Convert string to boolean if needed
+    if (typeof isDefault === "string") {
+      if (isDefault !== "true" && isDefault !== "false") {
+        throw new Error("isDefault must be a boolean value");
+      }
+    } else if (typeof isDefault !== "boolean") {
+      throw new Error("isDefault must be a boolean value");
     }
   }
 }
