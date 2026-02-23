@@ -31,7 +31,6 @@ exports.getHomeProductsController = async (req, res) => {
       })
     );
 
-    console.log(categoryProducts);
 
     const filteredCategories = categoryProducts.filter(Boolean);  
 

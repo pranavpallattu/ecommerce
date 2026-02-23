@@ -21,7 +21,7 @@ exports.getAllCustomersController = async (req, res) => {
       .sort({ _id: -1 })
       .skip(skip)
       .limit(limit)
-      .select("name emailId phone");
+      .select("name emailId createdAt");
 
     const totalCustomers = await User.countDocuments({
       isAdmin: false,

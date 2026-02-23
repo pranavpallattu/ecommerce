@@ -20,7 +20,9 @@ exports.getOrderSummary = async (req, res) => {
     ];
 
     if (!allowedFilterTypes.includes(filterType)) {
-      return res.status(400).json({success:false,message:"Invalid filter type"})
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid filter type" });
     }
 
     if (!filterType) filterType = "all";
@@ -68,22 +70,26 @@ exports.getOrderSummary = async (req, res) => {
       },
     ]);
 
-      // Fetch orders
-      const orders = await Order.find({
-        createdAt: { $gte: startDate, $lte: endDate },
-      }).populate("items.productId");
+    // Fetch orders
+    const orders = await Order.find({
+      createdAt: { $gte: startDate, $lte: endDate },
+    }).populate("items.productId");
 
-         const totalAmount = orders.reduce(
-    (sum, order) => sum + (order.grandTotal || 0),
-    0
-  );
+   const cartOrders = orders.filter(o => o.checkoutType === "cart").length;
+const buynowOrders = orders.filter(o => o.checkoutType === "buyNow").length;
 
 
+    const totalAmount = orders.reduce(
+      (sum, order) => sum + (order.grandTotal || 0),
+      0,
+    );
 
     // -------- Default Summary ----------
     const summary = {
       totalAmount,
       totalOrders: 0,
+      cartOrders,
+      buynowOrders,
       delivered: 0,
       processing: 0,
       confirmed: 0,
@@ -102,8 +108,6 @@ exports.getOrderSummary = async (req, res) => {
       summary.totalOrders += item.count;
       summary[item._id.toLowerCase()] = item.count;
     });
-
-   
 
     const formatDate = (date) => dayjs(date).format("DD/MM/YYYY hh:mm A");
 

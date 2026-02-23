@@ -4,6 +4,7 @@ const Product = require("../models/productSchema");
 const User = require("../models/userSchema");
 const Wallet = require("../models/walletSchema");
 const crypto = require("crypto");
+const sendSMS=require("../config/twiliosms")
 
 exports.listOrders = async (req, res) => {
   try {
@@ -21,7 +22,7 @@ exports.listOrders = async (req, res) => {
       // find users and products that matches the search
       const [userIds, productIds] = await Promise.all([
         User.find({ $or: [{ name: regex }, { emailId: regex }] }).distinct(
-          "_id"
+          "_id",
         ),
         Product.find({ productName: regex }).distinct("_id"),
       ]);
@@ -98,6 +99,8 @@ exports.orderStatus = async (req, res) => {
     Confirmed: ["Processing", "Cancelled"],
     Processing: ["Shipped", "Cancelled"],
     Shipped: ["Delivered"],
+    PartiallyCancelled: ["Processing", "Cancelled"],
+    PartiallyReturned: [],
     Delivered: [],
     Cancelled: [],
     Returned: [],
@@ -125,7 +128,7 @@ exports.orderStatus = async (req, res) => {
     const validStatuses = Object.keys(STATUS_TRANSITIONS);
     if (!status || !validStatuses.includes(status)) {
       const err = new Error(
-        `Invalid status value. Allowed statuses: ${validStatuses.join(", ")}.`
+        `Invalid status value. Allowed statuses: ${validStatuses.join(", ")}.`,
       );
       err.statusCode = 400;
       throw err;
@@ -141,7 +144,7 @@ exports.orderStatus = async (req, res) => {
     // prevent same status
     if (order.orderStatus === status) {
       const err = new Error(
-        `The order is already marked as '${status}'. No update required.`
+        `The order is already marked as '${status}'. No update required.`,
       );
       err.statusCode = 400;
       throw err;
@@ -150,7 +153,7 @@ exports.orderStatus = async (req, res) => {
     const statusAllowedNext = STATUS_TRANSITIONS[order.orderStatus] || [];
     if (!statusAllowedNext.includes(status)) {
       const err = new Error(
-        `Invalid status transition: cannot move order from '${order.orderStatus}' to '${status}'.`
+        `Invalid status transition: cannot move order from '${order.orderStatus}' to '${status}'.`,
       );
       err.statusCode = 400;
       throw err;
@@ -171,17 +174,23 @@ exports.orderStatus = async (req, res) => {
     }
 
     if (status === "Processing") {
-      if (order.orderStatus !== "Confirmed") {
+      if (
+        order.orderStatus !== "Confirmed" &&
+        order.orderStatus !== "PartiallyCancelled"
+      ) {
         const err = new Error(
-          "Order must be in the 'Confirmed' state before moving to 'Processing'."
+          "Order must be in the 'Confirmed' state before moving to 'Processing'.",
         );
         err.statusCode = 400;
         throw err;
       }
       order.items.forEach((item) => {
-        if (item.itemStatus !== "Confirmed") {
+        if (
+          item.itemStatus !== "Confirmed" &&
+          item.itemStatus !== "Cancelled"
+        ) {
           const err = new Error(
-            "All items must be confirmed before moving the order to processing."
+            "All items must be confirmed before moving the order to processing.",
           );
           err.statusCode = 400;
           throw err;
@@ -194,7 +203,7 @@ exports.orderStatus = async (req, res) => {
     if (status === "Shipped") {
       if (order.orderStatus !== "Processing") {
         const err = new Error(
-          "Order must be in the 'Processing' state before marking it as 'Shipped'."
+          "Order must be in the 'Processing' state before marking it as 'Shipped'.",
         );
         err.statusCode = 400;
         throw err;
@@ -202,7 +211,7 @@ exports.orderStatus = async (req, res) => {
       order.items.forEach((item) => {
         if (item.itemStatus !== "Processing") {
           const err = new Error(
-            "All items must be processing before marking the order as shipped."
+            "All items must be processing before marking the order as shipped.",
           );
           err.statusCode = 400;
           throw err;
@@ -215,7 +224,7 @@ exports.orderStatus = async (req, res) => {
     if (status === "Delivered") {
       if (order.orderStatus !== "Shipped") {
         const err = new Error(
-          "Order must be in the 'Shipped' state before marking it as 'Delivered'."
+          "Order must be in the 'Shipped' state before marking it as 'Delivered'.",
         );
         err.statusCode = 400;
         throw err;
@@ -223,7 +232,7 @@ exports.orderStatus = async (req, res) => {
       order.items.forEach((item) => {
         if (item.itemStatus !== "Shipped") {
           const err = new Error(
-            "All items must be shipped before marking the order as delivered."
+            "All items must be shipped before marking the order as delivered.",
           );
           err.statusCode = 400;
           throw err;
@@ -240,7 +249,7 @@ exports.orderStatus = async (req, res) => {
       for (const item of order.items) {
         if (!CANCELLABLE_ITEM_STATUSES.includes(item.itemStatus)) {
           const err = new Error(
-            `Item ${item.productId} cannot be cancelled (current status: ${item.itemStatus}).`
+            `Item ${item.productId} cannot be cancelled (current status: ${item.itemStatus}).`,
           );
           err.statusCode = 400;
           throw err;
@@ -251,7 +260,7 @@ exports.orderStatus = async (req, res) => {
         const product = await Product.findById(item.productId).session(session);
         if (!product) {
           const err = new Error(
-            `Product not found for item ${item.productId}. Cannot cancel.`
+            `Product not found for item ${item.productId}. Cannot cancel.`,
           );
           err.statusCode = 400;
           throw err;
@@ -292,12 +301,12 @@ exports.orderStatus = async (req, res) => {
                 },
               },
             },
-            { upsert: true, new: true, session }
+            { upsert: true, new: true, session },
           );
 
           if (!walletUpdate) {
             const err = new Error(
-              "Failed to update wallet balance. Refund could not be processed."
+              "Failed to update wallet balance. Refund could not be processed.",
             );
             err.statusCode = 400;
             throw err;
@@ -323,6 +332,37 @@ exports.orderStatus = async (req, res) => {
     // save
     await order.save({ session });
     await session.commitTransaction();
+
+
+    // After commitTransaction()
+try {
+  const phone = order.address?.snapshot?.phone;
+  if (phone) {
+    const formattedPhone = phone.startsWith("+")
+      ? phone
+      : `+91${phone}`;
+
+    let message = `Your order #${order._id} status updated to ${status}.`;
+
+    if (status === "Shipped") {
+      message = `🚚 Your order #${order._id} has been shipped.`;
+    }
+    if (status === "Delivered") {
+      message = `✅ Your order #${order._id} has been delivered. Enjoy your purchase!`;
+    }
+    if (status === "Cancelled") {
+      message = `❌ Your order #${order._id} has been cancelled. Refund will be processed if applicable.`;
+    }
+
+    await sendSMS(formattedPhone, message);
+  }
+} catch (smsError) {
+  console.error("SMS failed:", smsError.message);
+  // DO NOT rollback order status because SMS failed
+}
+
+
+
 
     // 10. Success
     return res.status(200).json({
@@ -354,11 +394,7 @@ exports.orderReturnApprove = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
 
-  // const NON_RETURNABLE_ITEM_STATUSES = [
-  //   "Cancelled",
-  //   "Returned",
-  //   "ReturnRejected",
-  // ];
+
 
   try {
     const { orderId } = req.params;
@@ -397,7 +433,7 @@ exports.orderReturnApprove = async (req, res) => {
     for (const item of order.items) {
       if (item.itemStatus !== "ReturnPending") {
         const err = new Error(
-          `Item ${item.productId} is not in ReturnPending status (current: ${item.itemStatus})`
+          `Item ${item.productId} is not in ReturnPending status (current: ${item.itemStatus})`,
         );
         err.statusCode = 400;
         throw err;
@@ -418,6 +454,7 @@ exports.orderReturnApprove = async (req, res) => {
 
     // order status
     order.orderStatus = "Returned";
+    order.returnedAt =  new Date();
 
     // item status
     for (const item of order.items) {
@@ -454,7 +491,7 @@ exports.orderReturnApprove = async (req, res) => {
           },
         },
       },
-      { upsert: true, new: true, session }
+      { upsert: true, new: true, session },
     );
 
     if (!walletUpdate) {
@@ -465,7 +502,7 @@ exports.orderReturnApprove = async (req, res) => {
       refundId: `refund_${crypto.randomUUID()}`,
       amount: refundAmount,
       itemIds: order.items.map((i) => i._id),
-      reason: order.returnedReason,
+      reason: order.returnReason,
       status: "Processed",
     };
     order.refunds.push(refundRecord);
@@ -689,7 +726,7 @@ exports.itemReturnApprove = async (req, res) => {
 
     if (item.itemStatus !== "ReturnPending") {
       const err = new Error(
-        "Only items in Return Pending state can be returned"
+        "Only items in Return Pending state can be returned",
       );
       err.statusCode = 409;
       throw err;
@@ -719,17 +756,22 @@ exports.itemReturnApprove = async (req, res) => {
     let refundRecord = null;
 
     const returnedCount = order.items.filter(
-      (item) => item.itemStatus === "Returned"
+      (item) => item.itemStatus === "Returned",
     ).length;
     const totalCount = order.items.length;
 
     if (returnedCount === totalCount) {
       order.orderStatus = "Returned";
+      order.returnedAt = new Date();
+
+      if (!order.returnReason) {
+        order.returnReason = "All items returned and approved";
+      }
     } else {
       order.orderStatus = "PartiallyReturned";
     }
 
-    await order.save({ session });
+    // await order.save({ session });
 
     // Calculate max refundable
     // PRORATE DISCOUNT
@@ -746,55 +788,54 @@ exports.itemReturnApprove = async (req, res) => {
 
     actualRefundAmount = Math.min(itemRefundAmount, maxRefundable);
 
-    if (actualRefundAmount > 0) {
-      const walletUpdate = await Wallet.findOneAndUpdate(
-        {
-          userId: order.userId,
-        },
-        {
-          $inc: { balance: actualRefundAmount },
-          $push: {
-            transactionHistory: {
-              type: "credit",
-              amount: actualRefundAmount,
-              description: `Refund for Returned item #${item._id}`,
+   
+      // ONLINE / WALLET PAYMENT
+      if (actualRefundAmount > 0) {
+        const walletUpdate = await Wallet.findOneAndUpdate(
+          { userId: order.userId },
+          {
+            $inc: { balance: actualRefundAmount },
+            $push: {
+              transactionHistory: {
+                type: "credit",
+                amount: actualRefundAmount,
+                description: `Refund for returned item #${item._id}`,
+              },
             },
           },
-        },
-        { upsert: true, new: true, session }
-      );
+          { upsert: true, new: true, session },
+        );
 
-      if (!walletUpdate) {
-        const err = new Error("Failed to update wallet balance");
-        err.statusCode = 404;
-        throw err;
+        if (!walletUpdate) {
+          const err = new Error("Failed to update wallet balance");
+          err.statusCode = 500;
+          throw err;
+        }
+
+        refundRecord = {
+          refundId: `refund_${crypto.randomUUID()}`,
+          amount: actualRefundAmount,
+          itemIds: [itemId],
+          reason: item.returnReason,
+          status: "Processed",
+        };
       }
-
-      refundRecord = {
-        refundId: `refund_${crypto.randomUUID()}`,
-        amount: actualRefundAmount,
-        itemIds: [itemId],
-        reason: item.returnReason,
-        status: "Processed",
-      };
-    }
+    
 
     // push refundRecord
 
-    if (refundRecord) {
-      order.refunds.push(refundRecord);
-    }
+    order.refunds.push(refundRecord);
 
-    // update payment status
-    const totalRefunded = order.refunds
-      .filter((r) => r.status === "Processed")
-      .reduce((sum, r) => sum + r.amount, 0);
 
-    if (totalRefunded >= originalGrandTotal) {
-      order.paymentStatus = "Refunded";
-    } else if (totalRefunded > 0) {
-      order.paymentStatus = "PartiallyRefunded";
-    }
+      const totalRefunded = order.refunds
+        .filter((r) => r.status === "Processed")
+        .reduce((sum, r) => sum + r.amount, 0);
+
+      if (totalRefunded >= originalGrandTotal) {
+        order.paymentStatus = "Refunded";
+      } else if (totalRefunded > 0) {
+        order.paymentStatus = "PartiallyRefunded";
+      }
 
     await order.save({ session });
     await session.commitTransaction();
@@ -825,7 +866,6 @@ exports.itemReturnApprove = async (req, res) => {
   }
 };
 
-
 exports.getReturnPendingRequests = async (req, res) => {
   try {
     const orders = await Order.find({
@@ -842,7 +882,6 @@ exports.getReturnPendingRequests = async (req, res) => {
     const itemReturns = [];
 
     for (const order of orders) {
-
       // ✅ CASE 1: FULL ORDER RETURN
       if (order.orderStatus === "ReturnPending") {
         orderReturns.push(order);

@@ -80,24 +80,36 @@ exports.addAddressController = async (req, res) => {
 
 exports.getAddressController = async (req, res) => {
   try {
-    const user = req.user;
+    const userId = req.user._id;
+
     const addresses = await Address.find({
-      userId: user._id,
+      userId,
       deletedAt: null,
     }).sort({
-      isDefault: -1,
-      createdAt: -1,
+      isDefault: -1,  // default first
+      createdAt: -1,  // latest next
     });
+
+    const defaultAddress = addresses.length > 0 ? addresses[0] : null;
 
     return res.status(200).json({
       success: true,
       message: "Addresses retrieved successfully",
-      data: addresses,
+      data: {
+        addresses,
+        defaultAddress,
+      },
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Get address error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch addresses",
+    });
   }
 };
+
+
 
 exports.softDeleteAddressController = async (req, res) => {
   try {

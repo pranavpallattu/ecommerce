@@ -6,12 +6,12 @@ const normalizeName = (name) => name.trim().toLowerCase();
 
 exports.addCategoryController = async (req, res) => {
   try {
-    // 1. Validate + clean data
-    const { name, description, offer } = validateCategoryData(req); // ← returns cleaned object
+    const { name, description, offer } = validateCategoryData(req);
 
-    // 2. Check for duplicate
+    // Duplicate check
     const existing = await Category.findOne({
       name: normalizeName(name),
+        deletedAt: null,
     });
 
     if (existing) {
@@ -21,11 +21,10 @@ exports.addCategoryController = async (req, res) => {
       });
     }
 
-    // 3. Create category
     const category = new Category({
       name: normalizeName(name),
-      description: description.trim(),
-      offer: offer || null,
+      description,
+      offer,
     });
 
     await category.save();
@@ -36,62 +35,55 @@ exports.addCategoryController = async (req, res) => {
       data: category,
     });
   } catch (error) {
-    // Validation errors come from validateCategoryData
-    if (
-      error.message.includes("required") ||
-      error.message.includes("length")
-    ) {
-      return res.status(400).json({ success: false, message: error.message });
-    }
     console.error("Add category error:", error);
-    return res.status(500).json({ success: false, message: "Server error" });
+
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || "Server error",
+    });
   }
 };
+
 
 exports.editCategoryController = async (req, res) => {
   try {
     const { id } = req.params;
-
-    // 1. Validate incoming data
     const { name, description, offer } = validateCategoryData(req);
 
-    // 2. Find category
     const category = await Category.findById(id);
     if (!category) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Category not found" });
-    }
-
-    // 3. Prevent editing deleted category
-    if (category.deletedAt) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Cannot edit a deleted category" });
-    }
-
-    // 4. Duplicate name check (if name is being changed)
-    if (name) {
-      const normalized = normalizeName(name);
-      const duplicate = await Category.findOne({
-        name: normalized,
-        _id: { $ne: id },
+      return res.status(404).json({
+        success: false,
+        message: "Category not found",
       });
-
-      if (duplicate) {
-        return res.status(409).json({
-          success: false,
-          message: "Another category with this name already exists",
-        });
-      }
-      category.name = normalized;
     }
 
-    // 5. Update other fields if provided
-    if (description !== undefined) category.description = description.trim();
-    if (offer !== undefined) category.offer = offer;
+    if (category.deletedAt) {
+      return res.status(400).json({
+        success: false,
+        message: "Cannot edit a deleted category",
+      });
+    }
 
-    // 6. Save
+    // Duplicate check
+    const normalized = normalizeName(name);
+    const duplicate = await Category.findOne({
+      name: normalized,
+        deletedAt: null,
+      _id: { $ne: id },
+    });
+
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        message: "Another category with this name already exists",
+      });
+    }
+
+    category.name = normalized;
+    category.description = description;
+    category.offer = offer;
+
     await category.save();
 
     return res.status(200).json({
@@ -100,14 +92,12 @@ exports.editCategoryController = async (req, res) => {
       data: category,
     });
   } catch (error) {
-    if (
-      error.message.includes("required") ||
-      error.message.includes("length")
-    ) {
-      return res.status(400).json({ success: false, message: error.message });
-    }
     console.error("Edit category error:", error);
-    return res.status(500).json({ success: false, message: "Server error" });
+
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || "Server error",
+    });
   }
 };
 exports.listCategoryController = async (req, res) => {
@@ -191,7 +181,7 @@ exports.softDeleteCategoryController = async (req, res) => {
     const updatedCategory = await Category.findByIdAndUpdate(
       id,
       { $set: { deletedAt: Date.now(), isActive: false } },
-      { new: true }
+      { new: true },
     );
 
     if (!updatedCategory) {

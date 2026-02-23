@@ -8,6 +8,8 @@ exports.getSalesReport = async (req, res) => {
     const { filterType = "all", startDate, endDate } = req.query;
 
     const data = await generateSalesReport({ filterType, startDate, endDate });
+    console.log(data);
+    
     return res.status(200).json({
       success: true,
       message: "Sales report summary fetched successfully",
@@ -90,6 +92,8 @@ exports.downloadSalesPDF = async (req, res) => {
 
     doc.fontSize(12).font("Helvetica");
     doc.text(`Total Orders: ${data.totalOrders}`);
+    doc.text(`Cart Orders: ${data.cartOrders}`);
+    doc.text(`Buy Now Orders: ${data.buynowOrders}`);
     doc.text(`Total Revenue:  ${formatCurrency(data.totalAmount)}`);
     doc.text(`Total Discount: ${formatCurrency(data.totalDiscount)}`);
     doc.text(`Coupon Deduction: ${formatCurrency(data.couponDeduction)}`);
@@ -179,6 +183,9 @@ exports.downloadSalesExcel = async (req, res) => {
 
     // ---------- SUMMARY ----------
     sheet.addRow(["Total Orders", data.totalOrders]);
+        sheet.addRow(["Cart Orders", data.cartOrders]);
+    sheet.addRow(["Buy Now Orders", data.buynowOrders]);
+
     sheet.addRow(["Total Revenue", `₹${data.totalAmount}`]);
     sheet.addRow(["Total Discount", `₹${data.totalDiscount}`]);
     sheet.addRow(["Coupon Deduction", `₹${data.couponDeduction}`]);

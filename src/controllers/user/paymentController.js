@@ -6,6 +6,8 @@ const { default: mongoose } = require("mongoose");
 const Product = require("../../models/productSchema");
 const Wallet = require("../../models/walletSchema");
 const Coupon = require("../../models/couponSchema");
+const BuyNow=require("../../models/buynowSchema");
+const { createInvoiceIfNeeded } = require("./invoiceController");
 
 exports.createOrder = async (req, res) => {
   try {
@@ -197,6 +199,7 @@ for (const item of cart.items) {
         addressId: orderDetails.address.addressId,
         snapshot: orderDetails.address.snapshot,
       },
+      checkoutType: "cart",
       couponId: orderDetails?.couponId,
       couponCode: orderDetails?.couponCode || null,
       subTotal: calculatedSubTotal, // Align with schema
@@ -212,7 +215,10 @@ for (const item of cart.items) {
     await order.save({ session });
     await Cart.deleteOne({ userId: user._id }).session(session);
 
+
     await session.commitTransaction();
+    await createInvoiceIfNeeded(order._id);
+
     return res
       .status(200)
       .json({ success: true, message: "Payment verified & order saved" });
@@ -228,155 +234,164 @@ for (const item of cart.items) {
   }
 };
 
-// exports.verifyPayment = async (req, res) => {
-//   const session = await mongoose.startSession();
-//   session.startTransaction();
 
-//   try {
-//     const {
-//       razorpay_order_id,
-//       razorpay_payment_id,
-//       razorpay_signature,
-//       orderDetails,
-//     } = req.body;
 
-//     const user = req.user;
 
-//     // === VALIDATE SIGNATURE ===
-//     const generatedSignature = crypto
-//       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
-//       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-//       .digest("hex");
 
-//     if (generatedSignature !== razorpay_signature) {
-//       throw new Error("Invalid signature - payment verification failed");
-//     }
 
-//     // === PREVENT DUPLICATE ORDERS ===
-//     const existingOrder = await Order.findOne({
-//       razorpayOrderId: razorpay_order_id,
-//     }).session(session);
 
-//     if (existingOrder) {
-//       await session.commitTransaction();
-//       return res.status(200).json({
-//         success: true,
-//         message: "Order already processed",
-//         data: { orderId: existingOrder._id },
-//       });
-//     }
 
-//     // === VALIDATE CART ===
-//     const cart = await Cart.findOne({ userId: user._id }).session(session);
-//     if (!cart || cart.items.length === 0) {
-//       throw new Error("Cart is empty or not found");
-//     }
 
-//     // === CALCULATE & VALIDATE AMOUNTS ===
-//     const calculatedSubTotal = cart.items.reduce(
-//       (sum, item) => sum + item.price * item.quantity,
-//       0
-//     );
 
-//     // Validate coupon and calculate discount
-//     let expectedDiscount = 0;
-//     if (orderDetails.couponId) {
-//       const coupon = await Coupon.findById(orderDetails.couponId).session(session);
 
-//       if (!coupon || !coupon.isActive) {
-//         throw new Error("Invalid or inactive coupon");
-//       }
+exports.createBuyNowOrder = async (req, res) => {
+  try {
+    const { buyNowId } = req.body;
+    console.log(buyNowId);
+    
+    const userId = req.user._id;
 
-//       if (calculatedSubTotal < coupon.minPurchase) {
-//         throw new Error("Minimum purchase requirement not met");
-//       }
+    const buyNow = await BuyNow.findOne({
+      _id: buyNowId,
+      userId,
+      status: "ACTIVE",
+    });
 
-//       if (coupon.discountType === "percentage") {
-//         expectedDiscount = (calculatedSubTotal * coupon.discountValue) / 100;
-//         if (coupon.maxDiscount) {
-//           expectedDiscount = Math.min(expectedDiscount, coupon.maxDiscount);
-//         }
-//       } else if (coupon.discountType === "flat") {
-//         expectedDiscount = coupon.discountValue;
-//       }
+    if (!buyNow) {
+      return res.status(404).json({
+        success: false,
+        message: "Buy Now session expired",
+      });
+    }
 
-//       expectedDiscount = Math.min(expectedDiscount, calculatedSubTotal);
+    const amount = buyNow.finalTotal;
 
-//       // Increment usage count
-//       coupon.usedCount = (coupon.usedCount || 0) + 1;
-//       await coupon.save({ session });
-//     }
+    const order = await razorpayInstance.orders.create({
+      amount: amount * 100,
+      currency: "INR",
+      receipt: `buynow_${buyNowId}`,
+      notes: {
+        buyNowId,
+        userId,
+      },
+    });
 
-//     const expectedGrandTotal = calculatedSubTotal - expectedDiscount;
+    res.status(200).json({
+      success: true,
+      order,
+      key: process.env.RAZORPAY_KEY_ID,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
-// // Validate amounts
-// if (
-//   calculatedSubTotal !== orderDetails.subTotal ||
-//   expectedDiscount !== orderDetails.discount ||
-//   expectedGrandTotal !== orderDetails.grandTotal
-// ) {
-//   throw new Error("Payment amount tampering detected");
-// }
 
-// // === VALIDATE & DEDUCT STOCK ===
-// for (const item of cart.items) {
-//   const product = await Product.findById(item.productId).session(session);
-//   if (!product || product.quantity < item.quantity) {
-//     throw new Error(`Insufficient stock for ${item.productName}`);
-//   }
-//   product.quantity -= item.quantity;
-//   await product.save({ session });
-// }
 
-// === CREATE ORDER ===
-//     const order = new Order({
-//       userId: user._id,
-//       items: cart.items.map((item) => ({
-//         productId: item.productId,
-//         productName: item.productName,
-//         productImage: item.productImage,
-//         quantity: item.quantity,
-//         price: item.price,
-//         subtotal: item.price * item.quantity,
-//         itemStatus: "Confirmed", // Payment confirmed
-//       })),
-//       address: {
-//         addressId: orderDetails.address.addressId,
-//         snapshot: orderDetails.address.snapshot,
-//       },
-//       couponId: orderDetails.couponId || null,
-//       couponCode: orderDetails.couponCode || null,
-//       subTotal: calculatedSubTotal,
-//       discount: expectedDiscount,
-//       grandTotal: expectedGrandTotal,
-//       paymentMethod: "razorpay",
-//       razorpayPaymentId: razorpay_payment_id,
-//       razorpayOrderId: razorpay_order_id,
-//       paymentStatus: "Paid",
-//       orderStatus: "Confirmed", // Payment confirmed
-//     });
+exports.verifyBuyNowPayment = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-//     await order.save({ session });
-//     await Cart.deleteOne({ userId: user._id }).session(session);
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      buyNowId,
+      address,
+    } = req.body;
 
-//     await session.commitTransaction();
+    const userId = req.user._id;
 
-//     return res.status(200).json({
-//       success: true,
-//       message: "Payment verified & order created",
-//       data: {
-//         orderId: order._id,
-//         grandTotal: order.grandTotal,
-//       },
-//     });
-//   } catch (error) {
-//     await session.abortTransaction();
-//     console.error("verifyPayment error:", error);
-//     return res.status(500).json({
-//       success: false,
-//       message: error.message
-//     });
-//   } finally {
-//     session.endSession();
-//   }
-// };
+    // 🔐 Verify Razorpay signature
+    const generatedSignature = crypto
+      .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
+      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .digest("hex");
+
+    if (generatedSignature !== razorpay_signature) {
+      throw new Error("Invalid payment signature");
+    }
+
+    // 🔍 Fetch BuyNow
+    const buyNow = await BuyNow.findOne({
+      _id: buyNowId,
+      userId,
+      status: "ACTIVE",
+    })
+      .populate("product.productId")
+      .session(session);
+
+    if (!buyNow) {
+      throw new Error("Buy Now session expired");
+    }
+
+    const product = buyNow.product.productId;
+    const quantity = buyNow.quantity; // usually 1
+    const subTotal = buyNow.subTotal;
+    const grandTotal = buyNow.finalTotal;
+
+    // 📦 Stock check
+    if (product.quantity < quantity) {
+      throw new Error("Insufficient stock");
+    }
+
+    // 🔻 Deduct stock
+    product.quantity -= quantity;
+    await product.save({ session });
+
+    // 🧾 Create Order
+    const order = new Order({
+      userId,
+      items: [
+        {
+          productId: product._id,
+          productName: product.productName,
+          productImage: product.images?.[0],
+          quantity,
+          price: product.salePrice,
+          subtotal: subTotal,
+          itemStatus: "Confirmed",
+        },
+      ],
+      address,
+      checkoutType: "buyNow",
+      subTotal,
+      discount: buyNow.discount || 0,
+      grandTotal,
+      paymentMethod: "razorpay",
+      razorpayOrderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id,
+      paymentStatus: "Paid",
+      orderStatus: "Confirmed",
+    });
+
+    await order.save({ session });
+
+    // ✅ Mark BuyNow completed
+    buyNow.status = "COMPLETED";
+    await buyNow.save({ session });
+
+    await session.commitTransaction();
+
+    await createInvoiceIfNeeded(order._id);
+
+
+    res.status(200).json({
+      success: true,
+      message: "Buy Now order placed successfully",
+      orderId: order._id,
+    });
+  } catch (error) {
+    await session.abortTransaction();
+    res.status(400).json({ success: false, message: error.message });
+  } finally {
+    session.endSession();
+  }
+};
+
+
+
+
+

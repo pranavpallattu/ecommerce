@@ -11,73 +11,70 @@ const salesReportController=require("../controllers/salesReportController")
 const dashboardController=require("../controllers/dashboardController")
 
 
-const {adminAuthMiddleware}=require("../middlewares/authMiddleware")
+const {authMiddleware, adminMiddleware}=require("../middlewares/authMiddleware")
 const upload = require("../middlewares/multerMiddleware")
 
-adminRouter.post("/category/add",adminAuthMiddleware,categoryController.addCategoryController)
-adminRouter.patch("/category/edit/:id",adminAuthMiddleware,categoryController.editCategoryController)
-adminRouter.post("/category/list/:id",adminAuthMiddleware,categoryController.listCategoryController)
-adminRouter.post("/category/unlist/:id",adminAuthMiddleware,categoryController.unListCategoryController)
-adminRouter.patch("/category/softDelete/:id",adminAuthMiddleware,categoryController.softDeleteCategoryController)
-adminRouter.get("/category/getCategory",adminAuthMiddleware,categoryController.getCategoriesController)
+adminRouter.post("/category/add" ,authMiddleware, adminMiddleware,categoryController.addCategoryController)
+adminRouter.patch("/category/edit/:id" ,authMiddleware, adminMiddleware,categoryController.editCategoryController)
+adminRouter.post("/category/list/:id" ,authMiddleware, adminMiddleware,categoryController.listCategoryController)
+adminRouter.post("/category/unlist/:id" ,authMiddleware, adminMiddleware,categoryController.unListCategoryController)
+adminRouter.patch("/category/softDelete/:id" ,authMiddleware, adminMiddleware,categoryController.softDeleteCategoryController)
+adminRouter.get("/category/getCategory" ,authMiddleware, adminMiddleware,categoryController.getCategoriesController)
 
-adminRouter.post("/product/addProduct",adminAuthMiddleware,upload.fields([{ name: "productImage", maxCount: 4 }]),productController.addProduct)
-adminRouter.put("/product/editProduct/:id",adminAuthMiddleware,upload.fields([{name:"productImage",maxCount:4}]),productController.editProduct)
-adminRouter.get("/product/:id",adminAuthMiddleware,productController.getProduct)
-adminRouter.patch("/product/list/:id",adminAuthMiddleware,productController.listProduct)
-adminRouter.patch("/product/unlist/:id",adminAuthMiddleware,productController.unListProduct)
-adminRouter.get("/products",adminAuthMiddleware,productController.getProducts)
-adminRouter.delete("/product/delete/:id",adminAuthMiddleware,productController.softDeleteProduct)
-
-
+adminRouter.post("/product/addProduct" ,authMiddleware, adminMiddleware,upload.fields([{ name: "productImage", maxCount: 4 }]),productController.addProduct)
+adminRouter.put("/product/editProduct/:id" ,authMiddleware, adminMiddleware,upload.fields([{name:"productImage",maxCount:4}]),productController.editProduct)
+adminRouter.get("/product/:id" ,authMiddleware, adminMiddleware,productController.getProduct)
+adminRouter.patch("/product/list/:id" ,authMiddleware, adminMiddleware,productController.listProduct)
+adminRouter.patch("/product/unlist/:id" ,authMiddleware, adminMiddleware,productController.unListProduct)
+adminRouter.get("/products" ,authMiddleware, adminMiddleware,productController.getProducts)
+adminRouter.delete("/product/delete/:id" ,authMiddleware, adminMiddleware,productController.softDeleteProduct)
 
 
 
-adminRouter.get("/admin/customers",adminAuthMiddleware, customerController.getAllCustomersController)
-adminRouter.patch("/admin/user/:id",adminAuthMiddleware,customerController.updateUserStatusController)
+
+
+adminRouter.get("/customers" ,authMiddleware, adminMiddleware, customerController.getAllCustomersController)
+adminRouter.patch("/user/:id" ,authMiddleware, adminMiddleware,customerController.updateUserStatusController)
 
 
 // CREATE
-adminRouter.post("/admin/coupons", adminAuthMiddleware, couponController.addCouponController);
+adminRouter.post("/coupons" ,authMiddleware, adminMiddleware, couponController.addCouponController);
 
 // READ (ALL)
-adminRouter.get("/admin/coupons", adminAuthMiddleware, couponController.getCouponController);
+adminRouter.get("/coupons" ,authMiddleware, adminMiddleware, couponController.getCouponController);
 
 // UPDATE STATUS (activate / deactivate)
-adminRouter.patch("/admin/coupons/:id/status", adminAuthMiddleware, couponController.updateCouponStatusController);
+adminRouter.patch("/coupons/:id/status" ,authMiddleware, adminMiddleware, couponController.updateCouponStatusController);
 
 // EDIT COUPON DETAILS
-adminRouter.patch( "/admin/coupons/:id", adminAuthMiddleware, couponController.editCouponController);
+adminRouter.patch( "/coupons/:id" ,authMiddleware, adminMiddleware, couponController.editCouponController);
 
 // SOFT DELETE
-adminRouter.delete( "/admin/coupons/:id", adminAuthMiddleware, couponController.softDeleteCouponController);
+adminRouter.delete( "/coupons/:id" ,authMiddleware, adminMiddleware, couponController.softDeleteCouponController);
 
 
 
+adminRouter.get("/orders" ,authMiddleware, adminMiddleware,orderController.listOrders)
+
+adminRouter.patch("/orders/return/reject/:orderId/:itemId" ,authMiddleware, adminMiddleware,orderController.itemReturnReject);
 
 
-
-adminRouter.get("/admin/orders",adminAuthMiddleware,orderController.listOrders)
-
-adminRouter.patch("/admin/orders/return/reject/:orderId/:itemId",adminAuthMiddleware,orderController.itemReturnReject);
-
-
-adminRouter.get("/admin/orders/:orderId",adminAuthMiddleware,orderController.viewOrder);
-adminRouter.patch("/admin/orders/:orderId",adminAuthMiddleware,orderController.orderStatus);
+adminRouter.get("/orders/:orderId" ,authMiddleware, adminMiddleware,orderController.viewOrder);
+adminRouter.patch("/orders/:orderId" ,authMiddleware, adminMiddleware,orderController.orderStatus);
 
 
 // ORDER RETURNS
-adminRouter.patch("/admin/orders/:orderId/return/approve", adminAuthMiddleware, orderController.orderReturnApprove);
+adminRouter.patch("/orders/:orderId/return/approve" ,authMiddleware, adminMiddleware, orderController.orderReturnApprove);
 
-adminRouter.patch("/admin/orders/:orderId/return/reject", adminAuthMiddleware, orderController.orderReturnReject);
+adminRouter.patch("/orders/:orderId/return/reject" ,authMiddleware, adminMiddleware, orderController.orderReturnReject);
 
 // ITEM RETURNS
-adminRouter.patch("/admin/orders/:orderId/items/:itemId/return/approve", adminAuthMiddleware, orderController.itemReturnApprove);
+adminRouter.patch("/orders/:orderId/items/:itemId/return/approve" ,authMiddleware, adminMiddleware, orderController.itemReturnApprove);
 
-adminRouter.patch("/admin/orders/:orderId/items/:itemId/return/reject", adminAuthMiddleware, orderController.itemReturnReject);
+adminRouter.patch("/orders/:orderId/items/:itemId/return/reject" ,authMiddleware, adminMiddleware, orderController.itemReturnReject);
 
 // NOTIFICATIONS (RETURN REQUESTS)
-adminRouter.get("/admin/notifications/returns", adminAuthMiddleware, orderController.getReturnPendingRequests);
+adminRouter.get("/notifications/returns" ,authMiddleware, adminMiddleware, orderController.getReturnPendingRequests);
 
 
 
@@ -88,17 +85,17 @@ adminRouter.get("/admin/notifications/returns", adminAuthMiddleware, orderContro
 
 
 
-adminRouter.get("/admin/getsalesreport",adminAuthMiddleware,salesReportController.getSalesReport)
-adminRouter.post("/admin/report/pdf",adminAuthMiddleware,salesReportController.downloadSalesPDF)
-adminRouter.post("/admin/report/excel",adminAuthMiddleware,salesReportController.downloadSalesExcel)
+adminRouter.get("/getsalesreport" ,authMiddleware, adminMiddleware,salesReportController.getSalesReport)
+adminRouter.post("/report/pdf" ,authMiddleware, adminMiddleware,salesReportController.downloadSalesPDF)
+adminRouter.post("/report/excel" ,authMiddleware, adminMiddleware,salesReportController.downloadSalesExcel)
 
 
 
 
 
-adminRouter.get("/admin/ordersummary",adminAuthMiddleware,dashboardController.getOrderSummary)
-adminRouter.get("/admin/bestsellingproducts",adminAuthMiddleware,dashboardController.getBestSellingProducts)
-adminRouter.get("/admin/bestsellingcategories",adminAuthMiddleware,dashboardController.getBestSellingCategories)
+adminRouter.get("/ordersummary" ,authMiddleware, adminMiddleware,dashboardController.getOrderSummary)
+adminRouter.get("/bestsellingproducts" ,authMiddleware, adminMiddleware,dashboardController.getBestSellingProducts)
+adminRouter.get("/bestsellingcategories" ,authMiddleware, adminMiddleware,dashboardController.getBestSellingCategories)
 
 
 

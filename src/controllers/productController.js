@@ -501,7 +501,14 @@ function calculateSalePrice(regularPriceRaw, categoryOfferRaw = 0, productOfferR
 exports.addProduct = async (req, res) => {
   try {
     // Validate incoming fields (preferably validateProductData checks req.body)
-validateProductData(req, "add");
+try{
+  validateProductData(req, "add");
+}
+catch(err){
+  console.log(err.message);
+  
+  return res.status(400).json({success:false,message:err.message})
+}
 
     // console.log(req)
 

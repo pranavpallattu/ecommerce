@@ -15,62 +15,53 @@ function validateSignUpData(req) {
 function validateCategoryData(req) {
   const { name, description, offer } = req.body;
 
+  const throwValidationError = (message) => {
+    const error = new Error(message);
+    error.statusCode = 400;
+    throw error;
+  };
+
   // 1. Required fields
   if (!name?.trim()) {
-    throw new Error("Category name is required");
-  }
-  if (!description?.trim()) {
-    throw new Error("Category description is required");
+    throwValidationError("Category name is required");
   }
 
-  // 2. Name: letters + spaces only, min 3 chars
+  if (!description?.trim()) {
+    throwValidationError("Category description is required");
+  }
+
+  // 2. Name validation
   const namePattern = /^[A-Za-z\s]+$/;
   if (!namePattern.test(name.trim())) {
-    throw new Error("Category name can only contain letters and spaces");
+    throwValidationError("Category name can only contain letters and spaces");
   }
+
   if (name.trim().length < 3) {
-    throw new Error("Category name must be at least 3 characters long");
+    throwValidationError("Category name must be at least 3 characters long");
   }
 
-  // 3. Description: min 10 characters
+  // 3. Description length
   if (description.trim().length < 10) {
-    throw new Error("Description must be at least 10 characters long");
+    throwValidationError("Description must be at least 10 characters long");
   }
 
-  // 4. Offer: optional, but if provided → must be 0–100
+  // 4. Offer validation
+  let cleanedOffer = null;
   if (offer !== undefined && offer !== null && offer !== "") {
     const offerNum = Number(offer);
     if (isNaN(offerNum) || offerNum < 0 || offerNum > 100) {
-      throw new Error("Offer must be a number between 0 and 100");
+      throwValidationError("Offer must be a number between 0 and 100");
     }
+    cleanedOffer = offerNum;
   }
 
-  // All good → return cleaned data
   return {
     name: name.trim(),
     description: description.trim(),
-    offer: offer ? Number(offer) : null,
+    offer: cleanedOffer,
   };
 }
 
-// function validateEditCategoryData(req) {
-//   let pattern = /^[a-z\s]+$/i;
-//   const { name, description, offer } = req.body;
-
-//   if (name && (!pattern.test(name) || name.length < 3)) {
-//     throw new Error(
-//       "name should contain only letters and spaces and should not be less than 3 letters"
-//     );
-//   }
-//   if (description && description.length < 10) {
-//     throw new Error(
-//       "Category description should contain only letters and spaces and should not be less than 10 letters"
-//     );
-//   }
-//   if (offer !== undefined && (offer < 0 || offer > 100)) {
-//     throw new Error("offer must be a number between 0 and 100");
-//   }
-// }
 
 function validateProductData(req, mode = "add") {
   let pattern = /^[a-z0-9\s\-()]+$/i;
@@ -195,22 +186,6 @@ function validateEditProductData(req) {
     throw new Error("Offer should be between 0 and 100.");
   }
 
-  // // 7️⃣ Image validation
-  // const totalImages =
-  //   (Array.isArray(existingImages) ? existingImages.length : 0) +
-  //   (Array.isArray(files) ? files.length : 0);
-
-  // if (totalImages < 1) {
-  //   throw new Error("Product must have at least one image.");
-  // }
-
-  // if (totalImages > 4) {
-  //   throw new Error("Product can have a maximum of 4 images.");
-  // }
-
-  // if (removedImages && Array.isArray(removedImages) && removedImages.length > 4) {
-  //   throw new Error("Removed images list cannot exceed 4.");
-  // }
 }
 
 function validateCouponData(couponData) {

@@ -72,6 +72,11 @@ const orderSchema = new mongoose.Schema(
         phone: { type: String, required: true },
       },
     },
+    checkoutType: {
+      type: String,
+      enum: ["cart", "buyNow"],
+      required: true,
+    },
     subTotal: { type: Number, required: true, min: 0 },
     discount: { type: Number, default: 0, min: 0 },
     grandTotal: { type: Number, required: true, min: 0 },
@@ -99,6 +104,7 @@ const orderSchema = new mongoose.Schema(
       enum: transactionStatuses,
       default: "Pending",
     },
+
     refunds: [
       {
         refundId: { type: String, required: true },
@@ -113,13 +119,26 @@ const orderSchema = new mongoose.Schema(
         },
       },
     ],
-    invoiceUrl: { type: String, default: null },
+invoice: {
+  number: {
+    type: String,
+    unique: true,
+    sparse: true, // allows null for unpaid orders
+  },
+  url: {
+    type: String, // PDF URL (S3 / Cloudinary / local)
+  },
+  generatedAt: {
+    type: Date,
+  },
+},
     deliveredAt: { type: Date, default: null },
     cancelledAt: { type: Date, default: null },
+    returnedAt : { type: Date, default: null },
     cancelledReason: { type: String, default: null },
-    returnedReason: { type: String, default: null },
+    returnReason: { type: String, default: null },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Auto-calculate subtotal and grand total, validate refunds

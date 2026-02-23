@@ -7,7 +7,14 @@ dayjs.extend(isoWeek);
 dayjs.extend(advancedFormat);
 
 const generateSalesReport = async ({ filterType, startDate, endDate }) => {
-  const allowedFilterTypes = ["all", "daily", "week", "month", "year", "custom"];
+  const allowedFilterTypes = [
+    "all",
+    "daily",
+    "week",
+    "month",
+    "year",
+    "custom",
+  ];
 
   if (!allowedFilterTypes.includes(filterType)) {
     throw new Error("Invalid filter type");
@@ -49,7 +56,7 @@ const generateSalesReport = async ({ filterType, startDate, endDate }) => {
 
   const totalAmount = orders.reduce(
     (sum, order) => sum + (order.grandTotal || 0),
-    0
+    0,
   );
 
   // Calculate product discounts
@@ -66,40 +73,82 @@ const generateSalesReport = async ({ filterType, startDate, endDate }) => {
 
   const couponDeduction = orders.reduce(
     (sum, order) => sum + (order.discount || 0),
-    0
+    0,
   );
 
-const totalRefunded = orders.reduce((sum, order) => {
-  const refundTotal = (order.refunds || []).reduce(
-    (rSum, refund) => rSum + (refund.amount || 0),
-    0
-  );
+  const totalRefunded = orders.reduce((sum, order) => {
+    const refundTotal = (order.refunds || []).reduce(
+      (rSum, refund) => rSum + (refund?.amount || 0),
+      0,
+    );
 
-  return sum + refundTotal;
-}, 0);
+    return sum + refundTotal;
+  }, 0);
+
+  const cartOrders = await Order.find({
+    checkoutType: "cart", createdAt: { $gte: startDate, $lte: endDate }
+  }).countDocuments();
+  const buynowOrders = await Order.find({
+    checkoutType: "buyNow", createdAt: { $gte: startDate, $lte: endDate }
+  }).countDocuments();
 
   // Order statuses
-  const delivered = orders.filter(o => o.orderStatus === "Delivered").length;
-  const cancelled = orders.filter(o => o.orderStatus === "Cancelled").length;
-  const shipped = orders.filter(o => o.orderStatus === "Shipped").length;
-  const returned = orders.filter(o => o.orderStatus === "Returned").length;
-  const pending = orders.filter(o => o.orderStatus === "Pending").length;
-  const processing = orders.filter(o => o.orderStatus === "Processing").length;
+  const confirmed = orders.filter((o) => o.orderStatus === "Confirmed").length;
 
-  const formatDate = date => dayjs(date).format("DD/MM/YYYY hh:mm A");
+  const delivered = orders.filter((o) => o.orderStatus === "Delivered").length;
+  const cancelled = orders.filter((o) => o.orderStatus === "Cancelled").length;
+  const shipped = orders.filter((o) => o.orderStatus === "Shipped").length;
+  const returned = orders.filter((o) => o.orderStatus === "Returned").length;
+  const pending = orders.filter((o) => o.orderStatus === "Pending").length;
+  const processing = orders.filter(
+    (o) => o.orderStatus === "Processing",
+  ).length;
+  const partiallyCancelled = orders.filter(
+    (o) => o.orderStatus === "PartiallyCancelled",
+  ).length;
+  const partiallyReturned = orders.filter(
+    (o) => o.orderStatus === "PartiallyReturned",
+  ).length;
+  const returnPending = orders.filter(
+    (o) => o.orderStatus === "returnPending",
+  ).length;
+  const returnRejected = orders.filter(
+    (o) => o.orderStatus === "returnRejected",
+  ).length;
+
+  //   "Pending", // ✅ ADD BACK - Order placed, awaiting payment/confirmation
+  // "Confirmed",
+  // "Processing",
+  // "Shipped",
+  // "Delivered",
+  // "Cancelled",
+  // "PartiallyCancelled",
+  // "Returned",
+  // "PartiallyReturned",
+  // "ReturnPending",
+  // "ReturnRejected",
+
+  const formatDate = (date) => dayjs(date).format("DD/MM/YYYY hh:mm A");
 
   return {
     totalOrders,
+    cartOrders,
+    buynowOrders,
     totalAmount,
     totalDiscount,
     couponDeduction,
     totalRefunded,
+    pending,
+    confirmed,
+    processing,
+    shipped,
     delivered,
     cancelled,
-    shipped,
+    partiallyCancelled,
     returned,
-    pending,
-    processing,
+    partiallyReturned,
+    returnPending,
+    returnRejected,
     filterType,
     startDate: formatDate(startDate),
     endDate: formatDate(endDate),

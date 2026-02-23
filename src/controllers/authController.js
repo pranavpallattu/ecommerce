@@ -8,70 +8,52 @@ const sendSMS = require("../config/twiliosms");
 
 // GOOGLE AUTH CALLBACK
 
+const cookieOptions = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite: "lax",
+  path: "/",
+};
+
 exports.googleVerifyCallback = async (req, res) => {
   try {
     const user = req.user;
 
     if (user.isBlocked) {
-      return res.status(403).json({
-        success: false,
-        message: "Your account has been blocked",
-      });
+      return res.status(403).json({ message: "Account blocked" });
     }
 
+    const role = user.isAdmin ? "admin" : "user";
+
     const token = jwt.sign(
-      { _id: user._id, isAdmin: user.isAdmin },
+      { _id: user._id, role },
       process.env.JWT_SECRET_KEY,
       { expiresIn: "1d" }
     );
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      expires: new Date(Date.now() + 8 * 3600000),
-    });
+    res.cookie("auth_token", token, cookieOptions);
 
-    // return res.status(200).json({
-    //   success: true,
-    //   message: "Login Successful",
-    //   data: {
-    //     _id: user._id,
-    //     name: user.name,
-    //     emailId: user.emailId,
-    //     isAdmin: user.isAdmin,
-    //   },
-    // });
-
-    // role based redirect
-
-    if (user.isAdmin) {
-      return res.redirect(`${process.env.CLIENT_URL}/admin/dashboard`);
-    }
-
-    return res.redirect(`${process.env.CLIENT_URL}/`);
-  } catch (error) {
-    console.error("Google auth error:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Authentication failed",
-    });
+    return res.redirect(`${process.env.CLIENT_URL}/google-success`);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Google auth failed" });
   }
 };
 
 exports.getMe = async (req, res) => {
   try {
-    console.log(req.user);
-    
-    return res.status(200).json({
+    return res.json({
       success: true,
       data: {
         _id: req.user._id,
         name: req.user.name,
         emailId: req.user.emailId,
         isAdmin: req.user.isAdmin,
+        role: req.user.isAdmin ? "admin" : "user",
       },
     });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+  } catch {
+    return res.status(500).json({ message: "Failed to fetch user" });
   }
 };
 
@@ -138,7 +120,7 @@ exports.requestAuthOtp = async (req, res) => {
     await sendOtpEmail(normalizedEmail, otp);
 
     const expiryTime = new Date(
-      newOtpDocument.createdAt.getTime() + 5 * 60 * 1000
+      newOtpDocument.createdAt.getTime() + 5 * 60 * 1000,
     );
     const expiresIn = Math.floor((expiryTime - Date.now()) / 1000);
 
@@ -217,16 +199,38 @@ exports.verifyAuthOtp = async (req, res) => {
     let user = await User.findOne({ emailId: normalizedEmail });
 
     if (user) {
-      const token = jwt.sign(
-        { _id: user._id, isAdmin: user.isAdmin },
-        process.env.JWT_SECRET_KEY,
-        { expiresIn: "1d" }
-      );
+    const role = user.isAdmin ? "admin" : "user";
 
-      res.cookie("token", token, {
-        httpOnly: true,
-        expires: new Date(Date.now() + 8 * 3600000),
-      });
+    const token = jwt.sign(
+      { _id: user._id, role },
+      process.env.JWT_SECRET_KEY,
+      { expiresIn: "1d" }
+    );
+
+//     const cookieName = role === "admin" ? "admin_token" : "user_token";
+
+// const cookieOptionsUser = {
+//   httpOnly: true,
+//   secure: process.env.NODE_ENV === "production",
+//   sameSite: "lax",
+//   path: "/", // user everywhere
+// };
+
+// const cookieOptionsAdmin = {
+//   httpOnly: true,
+//   secure: process.env.NODE_ENV === "production",
+//   sameSite: "lax",
+//   path: "/api/auth/admin", // 🔥 admin only for /api/auth/admin routes
+// };
+
+// if (role === "admin") {
+//   res.cookie("admin_token", token, cookieOptionsAdmin);
+// } else {
+//   res.cookie("user_token", token, cookieOptionsUser);
+// }
+
+
+    res.cookie("auth_token", token, cookieOptions);
 
       await Otp.deleteMany({ emailId: normalizedEmail });
 
@@ -234,8 +238,9 @@ exports.verifyAuthOtp = async (req, res) => {
         success: true,
         message: "Login successful",
         data: {
-          user,
-          role: user.role,
+          _id: user._id,
+          name: user.name,
+          emailId: user.emailId,
           isAdmin: user.isAdmin,
         },
       });
@@ -248,16 +253,38 @@ exports.verifyAuthOtp = async (req, res) => {
       isAdmin: false,
     });
 
+   const role = user.isAdmin ? "admin" : "user";
+
     const token = jwt.sign(
-      { _id: user._id, isAdmin: false },
+      { _id: user._id, role },
       process.env.JWT_SECRET_KEY,
       { expiresIn: "1d" }
     );
 
-    res.cookie("token", token, {
-      httpOnly: true,
-      expires: new Date(Date.now() + 8 * 3600000),
-    });
+//     const cookieName = role === "admin" ? "admin_token" : "user_token";
+
+// const cookieOptionsUser = {
+//   httpOnly: true,
+//   secure: process.env.NODE_ENV === "production",
+//   sameSite: "lax",
+//   path: "/", // user everywhere
+// };
+
+// const cookieOptionsAdmin = {
+//   httpOnly: true,
+//   secure: process.env.NODE_ENV === "production",
+//   sameSite: "lax",
+//   path: "/api/auth/admin", // 🔥 admin only for /api/auth/admin routes
+// };
+// if (role === "admin") {
+//   res.cookie("admin_token", token, cookieOptionsAdmin);
+// } else {
+//   res.cookie("user_token", token, cookieOptionsUser);
+// }
+
+res.cookie("auth_token", token, cookieOptions);
+
+
 
     await Otp.deleteMany({ emailId: normalizedEmail });
 
@@ -265,8 +292,9 @@ exports.verifyAuthOtp = async (req, res) => {
       success: true,
       message: "Signup successful",
       data: {
-        user,
-        role: user.role,
+        _id: user._id,
+        name: user.name,
+        emailId: user.emailId,
         isAdmin: false,
       },
     });
@@ -279,13 +307,26 @@ exports.verifyAuthOtp = async (req, res) => {
   }
 };
 
-exports.logoutController = async (req, res) => {
-  try {
-    res.clearCookie("token");
-    res
-      .status(201)
-      .json({ success: true, message: "User logged out successfully" });
-  } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
+// controllers/userAuthController.js
+
+exports.logout = (req, res) => {
+  res.clearCookie("auth_token", { path: "/" });
+  return res.json({ success: true, message: "Logged out" });
 };
+
+// controllers/adminAuthController.js
+
+// exports.adminLogout = (req, res) => {
+
+
+// const cookieOptionsAdmin = {
+//   httpOnly: true,
+//   secure: process.env.NODE_ENV === "production",
+//   sameSite: "lax",
+//   path: "/api/auth/admin", // 🔥 admin only for /api/auth/admin routes
+// };
+
+//   res.clearCookie("admin_token", cookieOptionsAdmin); // ✅ FIXED
+
+//   return res.json({ success: true, message: "Admin logged out" });
+// };
