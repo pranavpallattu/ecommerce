@@ -310,10 +310,18 @@ res.cookie("auth_token", token, cookieOptions);
 // controllers/userAuthController.js
 
 exports.logout = (req, res) => {
-  res.clearCookie("auth_token", { path: "/" });
-  return res.json({ success: true, message: "Logged out" });
-};
+  res.clearCookie("auth_token", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+    path: "/",
+  });
 
+  return res.json({
+    success: true,
+    message: "Logged out successfully",
+  });
+};
 // controllers/adminAuthController.js
 
 // exports.adminLogout = (req, res) => {
