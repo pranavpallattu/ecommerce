@@ -1,5 +1,5 @@
-const Category = require("../models/categorySchema");
-const { validateCategoryData } = require("../utils/validation");
+const Category = require("../../models/categorySchema");
+const { validateCategoryData } = require("../../utils/validation");
 
 // Helper: Normalize name
 const normalizeName = (name) => name.trim().toLowerCase();
@@ -154,25 +154,6 @@ exports.unListCategoryController = async (req, res) => {
   }
 };
 
-// exports.deleteCategoryController = async (req, res) => {
-//   try {
-//     const { id } = req.params;
-
-//     const existingCategory = await Category.findById(id);
-//     if (!existingCategory) {
-//       return res.status(404).json({ message: "category doesnt exists" });
-//     }
-
-//     await Category.findByIdAndDelete(id);
-//     res.status(200).json({
-//       success: true,
-//       message: existingCategory.name + "deleted successfully",
-//     });
-//   } catch (error) {
-//     console.error("Error in delete category :" + error);
-//     return res.status(500).json({ success: false, message: error.message });
-//   }
-// };
 
 exports.softDeleteCategoryController = async (req, res) => {
   try {

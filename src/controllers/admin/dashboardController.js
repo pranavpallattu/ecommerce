@@ -1,4 +1,4 @@
-const Order = require("../models/orderSchema");
+const Order = require("../../models/orderSchema");
 const dayjs = require("dayjs");
 const isoWeek = require("dayjs/plugin/isoWeek");
 const advancedFormat = require("dayjs/plugin/advancedFormat");

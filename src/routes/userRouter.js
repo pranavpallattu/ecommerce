@@ -92,5 +92,10 @@ userRouter.post(
 
 userRouter.get("/download/:orderId", authMiddleware , invoiceController.downloadInvoice );
 
+userRouter.post(
+  "/payment/webhook",
+  express.raw({ type: "application/json" }),
+  paymentController.razorpayWebhook
+);
 
 module.exports=userRouter

@@ -1,5 +1,5 @@
 const Order = require("../../models/orderSchema");
-const generateInvoice = require("../../utils/generateInvoice");
+const generateInvoice = require("../../services/invoiceService");
 
 
 exports.createInvoiceIfNeeded = async (orderId) => {

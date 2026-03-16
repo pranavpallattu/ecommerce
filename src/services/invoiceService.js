@@ -1,6 +1,6 @@
 const PDFDocument = require("pdfkit");
 const { PassThrough } = require("stream");
-const { invoicePrefix, company } = require("../config/invoiceConfig");
+const { invoicePrefix, company } = require("../config/invoice");
 const supabase = require("../config/supabase");
 
 module.exports = async function generateInvoice(order) {

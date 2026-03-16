@@ -1,9 +1,9 @@
 const { default: mongoose } = require("mongoose");
-const Coupon = require("../models/couponSchema");
 const {
   validateCouponData,
   validateEditCouponData,
-} = require("../utils/validation");
+} = require("../../utils/validation");
+const Coupon = require("../../models/couponSchema");
 
 exports.getCouponController = async (req, res) => {
   try {
@@ -60,6 +60,9 @@ exports.addCouponController = async (req, res) => {
     usageLimit,
     perUserLimit,
   } = req.body;
+  
+  console.log(usageLimit);
+  
   try {
     const parsedDiscount = Number(discount);
     const parsedMinPurchase = Number(minPurchase);
@@ -85,6 +88,9 @@ exports.addCouponController = async (req, res) => {
       usageLimit: parsedUsageLimit,
       perUserLimit: parsedPerUserLimit,
     };
+
+    console.log(couponData);
+    
 
     try {
       validateCouponData(couponData);

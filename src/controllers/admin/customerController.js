@@ -1,4 +1,4 @@
-const User = require("../models/userSchema");
+const User = require("../../models/userSchema");
 
 exports.getAllCustomersController = async (req, res) => {
   try {

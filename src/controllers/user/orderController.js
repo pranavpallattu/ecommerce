@@ -497,7 +497,7 @@ exports.orderCancel = async (req, res) => {
 
     order.orderStatus = "Cancelled";
     order.cancelledAt = new Date();
-    order.cancelledReason = reason?.trim() || "User requested cancellation";
+    order.cancellationReason = reason?.trim() || "User requested cancellation";
     order.items.forEach((item) => {
       item.itemStatus = "Cancelled";
       item.cancelledAt = new Date();
@@ -733,7 +733,7 @@ exports.cancelSingleItem = async (req, res) => {
   order.orderStatus = "Cancelled";
 
   // ✅ Set order-level cancellation reason safely
-  order.cancelledReason = "Order cancelled due to item cancellations";
+  order.cancellationReason = "Order cancelled due to item cancellations";
   order.cancelledAt = new Date();
 } else if (cancelledCount > 0) {
   order.orderStatus = "PartiallyCancelled";

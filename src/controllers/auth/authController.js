@@ -1,10 +1,10 @@
 const jwt = require("jsonwebtoken");
-const User = require("../models/userSchema");
-const { generateOtp, verifyOtp } = require("../utils/otp");
-const { sendOtpEmail } = require("../config/nodemailer");
+const User = require("../../models/userSchema");
+const { generateOtp, verifyOtp } = require("../../services/otpService");
+const { sendOtpEmail } = require("../../config/nodemailer");
 const validator = require("validator");
-const Otp = require("../models/otpSchema");
-const sendSMS = require("../config/twiliosms");
+const Otp = require("../../models/otpSchema");
+const sendSMS = require("../../config/twiliosms");
 
 // GOOGLE AUTH CALLBACK
 

@@ -2,13 +2,13 @@ const express=require("express")
 
 const adminRouter=express.Router()
 
-const categoryController=require("../controllers/categoryController")
-const productController=require("../controllers/productController")
-const customerController=require("../controllers/customerController")
-const couponController=require("../controllers/couponController")
-const orderController=require("../controllers/orderController")
-const salesReportController=require("../controllers/salesReportController")
-const dashboardController=require("../controllers/dashboardController")
+const categoryController=require("../controllers/admin/categoryController")
+const productController=require("../controllers/admin/productController")
+const customerController=require("../controllers/admin/customerController")
+const couponController=require("../controllers/admin/couponController")
+const orderController=require("../controllers/admin/orderController")
+const salesReportController=require("../controllers/admin/salesReportController")
+const dashboardController=require("../controllers/admin/dashboardController")
 
 
 const {authMiddleware, adminMiddleware}=require("../middlewares/authMiddleware")

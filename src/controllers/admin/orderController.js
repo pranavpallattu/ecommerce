@@ -1,10 +1,10 @@
 const { default: mongoose } = require("mongoose");
-const Order = require("../models/orderSchema");
-const Product = require("../models/productSchema");
-const User = require("../models/userSchema");
-const Wallet = require("../models/walletSchema");
+const Order = require("../../models/orderSchema");
+const Product = require("../../models/productSchema");
+const User = require("../../models/userSchema");
+const Wallet = require("../../models/walletSchema");
 const crypto = require("crypto");
-const sendSMS=require("../config/twiliosms")
+const sendSMS = require("../../config/twiliosms");
 
 exports.listOrders = async (req, res) => {
   try {

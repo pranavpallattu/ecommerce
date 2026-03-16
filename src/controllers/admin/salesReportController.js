@@ -1,7 +1,7 @@
-const generateSalesReport = require("../utils/salesReportService");
+const generateSalesReport = require("../../services/salesReportService");
 const ExcelJS = require("exceljs");
 const PDFDocument = require("pdfkit");
-const formatCurrency = require("../utils/formatCurrency");
+const formatCurrency = require("../../utils/formatCurrency");
 
 exports.getSalesReport = async (req, res) => {
   try {

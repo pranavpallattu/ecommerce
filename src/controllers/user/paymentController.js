@@ -6,14 +6,14 @@ const { default: mongoose } = require("mongoose");
 const Product = require("../../models/productSchema");
 const Wallet = require("../../models/walletSchema");
 const Coupon = require("../../models/couponSchema");
-const BuyNow=require("../../models/buynowSchema");
+const BuyNow = require("../../models/buynowSchema");
 const { createInvoiceIfNeeded } = require("./invoiceController");
 
 exports.createOrder = async (req, res) => {
   try {
     const { amount } = req.body;
     // console.log(req.body);
-    
+
     const { _id, name, emailId } = req.user;
     if (!amount || typeof amount !== "number" || amount <= 0) {
       return res.status(400).json({
@@ -34,7 +34,6 @@ exports.createOrder = async (req, res) => {
     });
 
     // console.log(order);
-    
 
     return res.status(200).json({
       success: true,
@@ -61,7 +60,6 @@ exports.verifyPayment = async (req, res) => {
     } = req.body;
 
     console.log(orderDetails);
-    
 
     const user = req.user;
 
@@ -78,9 +76,9 @@ exports.verifyPayment = async (req, res) => {
     }
 
     // prevent duplicate order
-    const existingOrder = await Order.findOne({
-      razorpayOrderId: razorpay_order_id,
-    });
+   const existingOrder = await Order.findOne({
+  razorpayOrderId: razorpay_order_id,
+}).session(session);
     if (existingOrder) {
       await session.commitTransaction();
       return res.status(200).json({
@@ -103,24 +101,22 @@ exports.verifyPayment = async (req, res) => {
 
     const calculatedSubTotal = cart.items.reduce(
       (sum, item) => sum + item.price * item.quantity,
-      0
+      0,
     );
     let expectedDiscount = 0;
 
     if (orderDetails?.couponId) {
-
       if (!mongoose.Types.ObjectId.isValid(orderDetails.couponId)) {
-    const err = new Error("Invalid coupon id format");
-    err.statusCode = 400;
-    throw err;
-  }
+        const err = new Error("Invalid coupon id format");
+        err.statusCode = 400;
+        throw err;
+      }
 
       const coupon = await Coupon.findById(orderDetails?.couponId).session(
-        session
+        session,
       );
 
       console.log(coupon);
-      
 
       if (!coupon || !coupon.isActive) {
         const err = new Error("Invalid or inactive coupon");
@@ -150,46 +146,46 @@ exports.verifyPayment = async (req, res) => {
       calculatedSubTotal !== orderDetails?.subTotal ||
       expectedDiscount !== orderDetails?.discount ||
       expectedGrandTotal !== orderDetails?.grandTotal
-     
-      
     ) {
-           console.log(calculatedSubTotal, expectedDiscount, expectedGrandTotal);
-           console.log(orderDetails?.subTotal, orderDetails?.discount , orderDetails?.grandTotal );
-           
+      console.log(calculatedSubTotal, expectedDiscount, expectedGrandTotal);
+      console.log(
+        orderDetails?.subTotal,
+        orderDetails?.discount,
+        orderDetails?.grandTotal,
+      );
+
       const err = new Error("Payment amount tampering detected");
       err.statusCode = 400;
       throw err;
     }
 
-
     // === VALIDATE & DEDUCT STOCK ===
-  const orderItems = [];
+    const orderItems = [];
 
-for (const item of cart.items) {
-  const product = await Product.findById(item.product).session(session);
+    for (const item of cart.items) {
+      const product = await Product.findById(item.product).session(session);
 
-  if (!product || product.quantity < item.quantity) {
-    const err = new Error(`Insufficient stock for ${product?.productName}`);
-    err.statusCode = 400;
-    throw err;
-  }
+      if (!product || product.quantity < item.quantity) {
+        const err = new Error(`Insufficient stock for ${product?.productName}`);
+        err.statusCode = 400;
+        throw err;
+      }
 
-  // deduct stock
-  product.quantity -= item.quantity;
-  await product.save({ session });
+      // deduct stock
+      product.quantity -= item.quantity;
+      await product.save({ session });
 
-  // build order item snapshot ✅
-  orderItems.push({
-    productId: product._id,
-    productName: product.productName, // ✅ FIXED
-    productImage: product.productImage[0] || null,
-    quantity: item.quantity,
-    price: item.price,
-    subtotal: item.price * item.quantity,
-    itemStatus: "Confirmed",
-  });
-}
-
+      // build order item snapshot ✅
+      orderItems.push({
+        productId: product._id,
+        productName: product.productName, // ✅ FIXED
+        productImage: product.productImage[0] || null,
+        quantity: item.quantity,
+        price: item.price,
+        subtotal: item.price * item.quantity,
+        itemStatus: "Confirmed",
+      });
+    }
 
     // save order
     order = new Order({
@@ -215,7 +211,6 @@ for (const item of cart.items) {
     await order.save({ session });
     await Cart.deleteOne({ userId: user._id }).session(session);
 
-
     await session.commitTransaction();
     await createInvoiceIfNeeded(order._id);
 
@@ -234,21 +229,11 @@ for (const item of cart.items) {
   }
 };
 
-
-
-
-
-
-
-
-
-
-
 exports.createBuyNowOrder = async (req, res) => {
   try {
     const { buyNowId } = req.body;
     console.log(buyNowId);
-    
+
     const userId = req.user._id;
 
     const buyNow = await BuyNow.findOne({
@@ -287,8 +272,6 @@ exports.createBuyNowOrder = async (req, res) => {
   }
 };
 
-
-
 exports.verifyBuyNowPayment = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -311,7 +294,22 @@ exports.verifyBuyNowPayment = async (req, res) => {
       .digest("hex");
 
     if (generatedSignature !== razorpay_signature) {
-      throw new Error("Invalid payment signature");
+      const err = new Error("Invalid signature, payment failed");
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const existingOrder = await Order.findOne({
+      razorpayOrderId: razorpay_order_id,
+    }).session(session);
+
+    if (existingOrder) {
+      await session.commitTransaction();
+      return res.status(200).json({
+        success: true,
+        message: "Order already processed",
+        orderId: existingOrder._id,
+      });
     }
 
     // 🔍 Fetch BuyNow
@@ -377,7 +375,6 @@ exports.verifyBuyNowPayment = async (req, res) => {
 
     await createInvoiceIfNeeded(order._id);
 
-
     res.status(200).json({
       success: true,
       message: "Buy Now order placed successfully",
@@ -391,7 +388,91 @@ exports.verifyBuyNowPayment = async (req, res) => {
   }
 };
 
+exports.razorpayWebhook = async (req, res) => {
+  try {
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    const signature = req.headers["x-razorpay-signature"];
 
+    const expectedSignature = crypto
+      .createHmac("sha256", webhookSecret)
+      .update(req.body)
+      .digest("hex");
 
+    if (expectedSignature !== signature) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid webhook signature",
+      });
+    }
 
+    const body = JSON.parse(req.body);
 
+    const event = body.event;
+    const payment = body.payload.payment.entity;
+
+    const razorpayOrderId = payment.order_id;
+    const razorpayPaymentId = payment.id;
+
+    const order = await Order.findOne({ razorpayOrderId });
+
+    if (!order) {
+      return res.status(200).json({
+        success: true,
+        message: "Order not found",
+      });
+    }
+
+    if (event === "payment.captured") {
+      if (order.paymentStatus === "Paid") {
+        return res.status(200).json({
+          success: true,
+          message: "Already processed",
+        });
+      }
+
+      order.paymentStatus = "Paid";
+      order.orderStatus = "Confirmed";
+      order.razorpayPaymentId = razorpayPaymentId;
+
+      order.items.forEach((item) => {
+        if (item.itemStatus === "Pending") {
+          item.itemStatus = "Confirmed";
+        }
+      });
+
+      await order.save();
+      await createInvoiceIfNeeded(order._id);
+    }
+
+    if (event === "payment.failed") {
+      if (order.paymentStatus === "Paid") {
+        return res.status(200).json({
+          success: true,
+          message: "Order already paid, ignoring failed event",
+        });
+      }
+
+      order.paymentStatus = "Failed";
+      order.orderStatus = "Cancelled";
+
+      order.items.forEach((item) => {
+        if (item.itemStatus === "Pending") {
+          item.itemStatus = "Cancelled";
+        }
+      });
+
+      await order.save();
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Webhook processed",
+    });
+  } catch (error) {
+    console.error("Webhook error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Webhook processing failed",
+    });
+  }
+};
