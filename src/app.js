@@ -13,7 +13,7 @@ require("./config/passport");
 const app = express();
 
 app.use(cors({
-  origin: "http://localhost:5173",
+  origin: "https://ecommerceui-one.vercel.app",
   credentials: true,
   methods: ["GET", "POST", "PATCH", "DELETE", "PUT", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
