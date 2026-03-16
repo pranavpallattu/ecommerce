@@ -8,7 +8,7 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID, // from Google Cloud Console
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-callbackURL: "https://ecommerceui-one.vercel.app/api/auth/google/callback",    },
+callbackURL: "https://ecommerce-8tjk.onrender.com/api/auth/google/callback",  },
     async (accessToken, refreshToken, profile, done) => {
       try {
         let user = await User.findOne({
