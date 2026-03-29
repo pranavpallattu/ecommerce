@@ -76,9 +76,9 @@ exports.verifyPayment = async (req, res) => {
     }
 
     // prevent duplicate order
-   const existingOrder = await Order.findOne({
-  razorpayOrderId: razorpay_order_id,
-}).session(session);
+    const existingOrder = await Order.findOne({
+      razorpayOrderId: razorpay_order_id,
+    }).session(session);
     if (existingOrder) {
       await session.commitTransaction();
       return res.status(200).json({
@@ -116,8 +116,6 @@ exports.verifyPayment = async (req, res) => {
         session,
       );
 
-      console.log(coupon);
-
       if (!coupon || !coupon.isActive) {
         const err = new Error("Invalid or inactive coupon");
         err.statusCode = 400;
@@ -148,11 +146,11 @@ exports.verifyPayment = async (req, res) => {
       expectedGrandTotal !== orderDetails?.grandTotal
     ) {
       console.log(calculatedSubTotal, expectedDiscount, expectedGrandTotal);
-      console.log(
-        orderDetails?.subTotal,
-        orderDetails?.discount,
-        orderDetails?.grandTotal,
-      );
+      // console.log(
+      //   orderDetails?.subTotal,
+      //   orderDetails?.discount,
+      //   orderDetails?.grandTotal,
+      // );
 
       const err = new Error("Payment amount tampering detected");
       err.statusCode = 400;
@@ -232,7 +230,6 @@ exports.verifyPayment = async (req, res) => {
 exports.createBuyNowOrder = async (req, res) => {
   try {
     const { buyNowId } = req.body;
-    console.log(buyNowId);
 
     const userId = req.user._id;
 
@@ -277,6 +274,8 @@ exports.verifyBuyNowPayment = async (req, res) => {
   session.startTransaction();
 
   try {
+    console.log("verify buy now called");
+
     const {
       razorpay_order_id,
       razorpay_payment_id,
@@ -390,6 +389,8 @@ exports.verifyBuyNowPayment = async (req, res) => {
 
 exports.razorpayWebhook = async (req, res) => {
   try {
+    console.log("webhook called");
+
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
     const signature = req.headers["x-razorpay-signature"];
 
@@ -442,6 +443,20 @@ exports.razorpayWebhook = async (req, res) => {
 
       await order.save();
       await createInvoiceIfNeeded(order._id);
+
+      try {
+        const phone = order.address?.snapshot?.phone;
+        if (phone) {
+          const formattedPhone = phone.startsWith("+") ? phone : `+91${phone}`;
+
+          await sendSMS(
+            formattedPhone,
+            `✅ Your order #${order._id} has been confirmed successfully.`,
+          );
+        }
+      } catch (err) {
+        console.error("SMS failed:", err.message);
+      }
     }
 
     if (event === "payment.failed") {
@@ -462,6 +477,16 @@ exports.razorpayWebhook = async (req, res) => {
       });
 
       await order.save();
+
+      const phone = order.address?.snapshot?.phone;
+      if (phone) {
+        const formattedPhone = phone.startsWith("+") ? phone : `+91${phone}`;
+
+        await sendSMS(
+          formattedPhone,
+          ` Payment failed for order #${order._id}. Please try again.`,
+        );
+      }
     }
 
     return res.status(200).json({

@@ -16,7 +16,7 @@ exports.createInvoiceIfNeeded = async (orderId) => {
   const { invoiceNumber, invoiceUrl, storagePath } =
     await generateInvoice(order);
 
-    console.log(invoiceNumber,  invoiceUrl,   storagePath);
+    // console.log(invoiceNumber,  invoiceUrl,   storagePath);
     
 
   order.invoice = {

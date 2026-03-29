@@ -333,36 +333,30 @@ exports.orderStatus = async (req, res) => {
     await order.save({ session });
     await session.commitTransaction();
 
-
     // After commitTransaction()
-try {
-  const phone = order.address?.snapshot?.phone;
-  if (phone) {
-    const formattedPhone = phone.startsWith("+")
-      ? phone
-      : `+91${phone}`;
+    try {
+      const phone = order.address?.snapshot?.phone;
+      if (phone) {
+        const formattedPhone = phone.startsWith("+") ? phone : `+91${phone}`;
 
-    let message = `Your order #${order._id} status updated to ${status}.`;
+        let message = `Your order #${order._id} status updated to ${status}.`;
 
-    if (status === "Shipped") {
-      message = `🚚 Your order #${order._id} has been shipped.`;
+        if (status === "Shipped") {
+          message = `🚚 Your order #${order._id} has been shipped.`;
+        }
+        if (status === "Delivered") {
+          message = `✅ Your order #${order._id} has been delivered. Enjoy your purchase!`;
+        }
+        if (status === "Cancelled") {
+          message = `❌ Your order #${order._id} has been cancelled. Refund will be processed if applicable.`;
+        }
+
+        await sendSMS(formattedPhone, message);
+      }
+    } catch (smsError) {
+      console.error("SMS failed:", smsError.message);
+      // DO NOT rollback order status because SMS failed
     }
-    if (status === "Delivered") {
-      message = `✅ Your order #${order._id} has been delivered. Enjoy your purchase!`;
-    }
-    if (status === "Cancelled") {
-      message = `❌ Your order #${order._id} has been cancelled. Refund will be processed if applicable.`;
-    }
-
-    await sendSMS(formattedPhone, message);
-  }
-} catch (smsError) {
-  console.error("SMS failed:", smsError.message);
-  // DO NOT rollback order status because SMS failed
-}
-
-
-
 
     // 10. Success
     return res.status(200).json({
@@ -393,8 +387,6 @@ try {
 exports.orderReturnApprove = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
-
-
 
   try {
     const { orderId } = req.params;
@@ -454,7 +446,7 @@ exports.orderReturnApprove = async (req, res) => {
 
     // order status
     order.orderStatus = "Returned";
-    order.returnedAt =  new Date();
+    order.returnedAt = new Date();
 
     // item status
     for (const item of order.items) {
@@ -525,6 +517,20 @@ exports.orderReturnApprove = async (req, res) => {
     await order.save({ session });
     await session.commitTransaction();
 
+    try {
+      const phone = order.address?.snapshot?.phone;
+      if (phone) {
+        const formattedPhone = phone.startsWith("+") ? phone : `+91${phone}`;
+
+        await sendSMS(
+          formattedPhone,
+          `🔁 Your return request for order #${order._id} has been approved. Refund processed.`,
+        );
+      }
+    } catch (err) {
+      console.error("SMS failed:", err.message);
+    }
+
     // 10. Success
     return res.status(200).json({
       success: true,
@@ -584,6 +590,20 @@ exports.orderReturnReject = async (req, res) => {
     }
 
     await order.save();
+
+    try {
+      const phone = order.address?.snapshot?.phone;
+      if (phone) {
+        const formattedPhone = phone.startsWith("+") ? phone : `+91${phone}`;
+
+        await sendSMS(
+          formattedPhone,
+          `❌ Your return request for order #${order._id} has been rejected.`,
+        );
+      }
+    } catch (err) {
+      console.error("SMS failed:", err.message);
+    }
 
     return res.status(200).json({
       success: true,
@@ -664,6 +684,22 @@ exports.itemReturnReject = async (req, res) => {
 
     await order.save({ session });
     await session.commitTransaction();
+
+    await session.commitTransaction();
+
+    try {
+      const phone = order.address?.snapshot?.phone;
+      if (phone) {
+        const formattedPhone = phone.startsWith("+") ? phone : `+91${phone}`;
+
+        await sendSMS(
+          formattedPhone,
+          `❌ Return request rejected for item in order #${order._id}.`,
+        );
+      }
+    } catch (err) {
+      console.error("SMS failed:", err.message);
+    }
 
     return res.status(200).json({
       success: true,
@@ -788,57 +824,68 @@ exports.itemReturnApprove = async (req, res) => {
 
     actualRefundAmount = Math.min(itemRefundAmount, maxRefundable);
 
-   
-      // ONLINE / WALLET PAYMENT
-      if (actualRefundAmount > 0) {
-        const walletUpdate = await Wallet.findOneAndUpdate(
-          { userId: order.userId },
-          {
-            $inc: { balance: actualRefundAmount },
-            $push: {
-              transactionHistory: {
-                type: "credit",
-                amount: actualRefundAmount,
-                description: `Refund for returned item #${item._id}`,
-              },
+    // ONLINE / WALLET PAYMENT
+    if (actualRefundAmount > 0) {
+      const walletUpdate = await Wallet.findOneAndUpdate(
+        { userId: order.userId },
+        {
+          $inc: { balance: actualRefundAmount },
+          $push: {
+            transactionHistory: {
+              type: "credit",
+              amount: actualRefundAmount,
+              description: `Refund for returned item #${item._id}`,
             },
           },
-          { upsert: true, new: true, session },
-        );
+        },
+        { upsert: true, new: true, session },
+      );
 
-        if (!walletUpdate) {
-          const err = new Error("Failed to update wallet balance");
-          err.statusCode = 500;
-          throw err;
-        }
-
-        refundRecord = {
-          refundId: `refund_${crypto.randomUUID()}`,
-          amount: actualRefundAmount,
-          itemIds: [itemId],
-          reason: item.returnReason,
-          status: "Processed",
-        };
+      if (!walletUpdate) {
+        const err = new Error("Failed to update wallet balance");
+        err.statusCode = 500;
+        throw err;
       }
-    
+
+      refundRecord = {
+        refundId: `refund_${crypto.randomUUID()}`,
+        amount: actualRefundAmount,
+        itemIds: [itemId],
+        reason: item.returnReason,
+        status: "Processed",
+      };
+    }
 
     // push refundRecord
 
     order.refunds.push(refundRecord);
 
+    const totalRefunded = order.refunds
+      .filter((r) => r.status === "Processed")
+      .reduce((sum, r) => sum + r.amount, 0);
 
-      const totalRefunded = order.refunds
-        .filter((r) => r.status === "Processed")
-        .reduce((sum, r) => sum + r.amount, 0);
-
-      if (totalRefunded >= originalGrandTotal) {
-        order.paymentStatus = "Refunded";
-      } else if (totalRefunded > 0) {
-        order.paymentStatus = "PartiallyRefunded";
-      }
+    if (totalRefunded >= originalGrandTotal) {
+      order.paymentStatus = "Refunded";
+    } else if (totalRefunded > 0) {
+      order.paymentStatus = "PartiallyRefunded";
+    }
 
     await order.save({ session });
     await session.commitTransaction();
+
+    try {
+      const phone = order.address?.snapshot?.phone;
+      if (phone) {
+        const formattedPhone = phone.startsWith("+") ? phone : `+91${phone}`;
+
+        await sendSMS(
+          formattedPhone,
+          `🔁 Return approved for item in order #${order._id}. Refund processed.`,
+        );
+      }
+    } catch (err) {
+      console.error("SMS failed:", err.message);
+    }
 
     // 10. Success
     return res.status(200).json({

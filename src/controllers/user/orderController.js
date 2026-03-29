@@ -15,9 +15,7 @@ exports.placeOrder = async (req, res) => {
   await session.startTransaction();
   try {
     const { paymentMethod, address, couponId, couponCode } = req.body;
-    console.log(address);
     
-    console.log(paymentMethod);
     const user = req.user;
 
     // validate payment method
@@ -240,7 +238,6 @@ exports.placeBuyNowOrder = async (req, res) => {
       userId
     }).populate("product.productId").session(session);
 
-    // console.log(buyNow);
     
 
     if (!buyNow) {
@@ -254,16 +251,12 @@ exports.placeBuyNowOrder = async (req, res) => {
     const quantity = 1;
     const subTotal = product.salePrice;
     const grandTotal = subTotal; // no coupon
-    console.log(grandTotal);
     
 
     // Wallet payment
     let walletUsed = 0;
     if (paymentMethod === "wallet") {
       const wallet = await Wallet.findOne({ userId }).session(session);
-      console.log(wallet);
-
-      console.log(wallet.balance < grandTotal);
       
       
 
@@ -284,10 +277,7 @@ exports.placeBuyNowOrder = async (req, res) => {
       });
 
       await wallet.save({ session });
-    }
-    // console.log(product);
-    // console.log(product.quantity);
-    
+    }    
     
 
     // Stock check
@@ -413,7 +403,6 @@ exports.getSingleOrder = async (req, res) => {
       .populate("items.productId")
       .lean();
 
-      console.log(order)
 
     if (!order) {
       return res
@@ -619,7 +608,6 @@ exports.cancelSingleItem = async (req, res) => {
   try {
     const { orderId, itemId } = req.params;
     const { cancellationReason } = req.body;
-    console.log(cancellationReason);
     
     const user = req.user;
 
