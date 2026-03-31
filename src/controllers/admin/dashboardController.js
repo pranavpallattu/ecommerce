@@ -136,7 +136,7 @@ exports.getBestSellingProducts = async (req, res) => {
       },
 
       { $sort: { totalSold: -1 } },
-      { $limit: 10 },
+      { $limit: 5 },
 
       {
         $lookup: {
@@ -190,7 +190,7 @@ exports.getBestSellingCategories = async (req, res) => {
       },
 
       { $sort: { totalSold: -1 } },
-      { $limit: 10 },
+      { $limit: 5 },
 
       {
         $lookup: {

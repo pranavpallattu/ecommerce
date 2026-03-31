@@ -86,10 +86,12 @@ const generateSalesReport = async ({ filterType, startDate, endDate }) => {
   }, 0);
 
   const cartOrders = await Order.find({
-    checkoutType: "cart", createdAt: { $gte: startDate, $lte: endDate }
+    checkoutType: "cart",
+    createdAt: { $gte: startDate, $lte: endDate },
   }).countDocuments();
   const buynowOrders = await Order.find({
-    checkoutType: "buyNow", createdAt: { $gte: startDate, $lte: endDate }
+    checkoutType: "buyNow",
+    createdAt: { $gte: startDate, $lte: endDate },
   }).countDocuments();
 
   // Order statuses
@@ -110,23 +112,11 @@ const generateSalesReport = async ({ filterType, startDate, endDate }) => {
     (o) => o.orderStatus === "PartiallyReturned",
   ).length;
   const returnPending = orders.filter(
-    (o) => o.orderStatus === "returnPending",
+    (o) => o.orderStatus === "ReturnPending",
   ).length;
   const returnRejected = orders.filter(
-    (o) => o.orderStatus === "returnRejected",
+    (o) => o.orderStatus === "ReturnRejected",
   ).length;
-
-  //   "Pending", // ✅ ADD BACK - Order placed, awaiting payment/confirmation
-  // "Confirmed",
-  // "Processing",
-  // "Shipped",
-  // "Delivered",
-  // "Cancelled",
-  // "PartiallyCancelled",
-  // "Returned",
-  // "PartiallyReturned",
-  // "ReturnPending",
-  // "ReturnRejected",
 
   const formatDate = (date) => dayjs(date).format("DD/MM/YYYY hh:mm A");
 

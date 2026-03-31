@@ -8,8 +8,10 @@ exports.createInvoiceIfNeeded = async (orderId) => {
   if (!order) throw new Error("Order not found");
 
   // Only paid orders
-  if (order.paymentStatus !== "Paid") return;
-
+// Allow invoice for both Paid and COD
+// if (!["Paid", "Pending", "N/A"].includes(order.paymentStatus)) return;
+// Only prevent duplicate invoices
+if (order.invoice?.number) return;
   // Prevent duplicates
   if (order.invoice?.number) return;
 

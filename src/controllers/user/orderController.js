@@ -5,17 +5,22 @@ const Wallet = require("../../models/walletSchema");
 const Product = require("../../models/productSchema");
 const Coupon = require("../../models/couponSchema");
 const crypto = require("crypto");
-const BuyNow=require("../../models/buynowSchema");
+const BuyNow = require("../../models/buynowSchema");
 const { createInvoiceIfNeeded } = require("./invoiceController");
 
-const CANCELLABLE_STATUSES = ["Pending", "Confirmed", "Processing", "PartiallyCancelled"];
+const CANCELLABLE_STATUSES = [
+  "Pending",
+  "Confirmed",
+  "Processing",
+  "PartiallyCancelled",
+];
 
 exports.placeOrder = async (req, res) => {
   const session = await mongoose.startSession();
   await session.startTransaction();
   try {
     const { paymentMethod, address, couponId, couponCode } = req.body;
-    
+
     const user = req.user;
 
     // validate payment method
@@ -42,7 +47,7 @@ exports.placeOrder = async (req, res) => {
 
     const subTotal = cart.items.reduce(
       (sum, item) => sum + item.price * item.quantity,
-      0
+      0,
     );
     let discount = 0;
     let validCouponId = null;
@@ -74,7 +79,7 @@ exports.placeOrder = async (req, res) => {
       // Check minimum purchase
       if (subTotal < coupon.minPurchase) {
         const err = new Error(
-          `Minimum purchase of ₹${coupon.minPurchase} required to use this coupon`
+          `Minimum purchase of ₹${coupon.minPurchase} required to use this coupon`,
         );
         err.statusCode = 400;
         throw err;
@@ -107,7 +112,7 @@ exports.placeOrder = async (req, res) => {
 
     if (paymentMethod === "wallet") {
       const wallet = await Wallet.findOne({ userId: user._id }).session(
-        session
+        session,
       );
       if (!wallet || wallet.balance < grandTotal) {
         const err = new Error("Insufficient wallet balance");
@@ -134,7 +139,7 @@ exports.placeOrder = async (req, res) => {
       }
       if (product.quantity < item.quantity) {
         const err = new Error(
-          `Insufficient stock for ${item.productName}. Only ${product.quantity} available.`
+          `Insufficient stock for ${item.productName}. Only ${product.quantity} available.`,
         );
         err.statusCode = 409;
         throw err;
@@ -146,7 +151,7 @@ exports.placeOrder = async (req, res) => {
       await Product.findByIdAndUpdate(
         item.product,
         { $inc: { quantity: -item.quantity } },
-        { session }
+        { session },
       );
     }
 
@@ -175,7 +180,7 @@ exports.placeOrder = async (req, res) => {
       grandTotal,
       walletAmountUsed: walletUsed,
       paymentMethod,
-      paymentStatus: paymentMethod === "cod" ? "N/A" : "Paid",
+      paymentStatus: paymentMethod === "cod" ? "Pending" : "Paid",
       orderStatus: "Confirmed",
     });
 
@@ -184,15 +189,11 @@ exports.placeOrder = async (req, res) => {
 
     await session.commitTransaction();
 
-        if (paymentMethod === "wallet") {
-  try {
-    await createInvoiceIfNeeded(order._id);
-  } catch (err) {
-    console.error("Invoice generation failed:", err.message);
-    // do NOT fail order — invoice can be regenerated later
-  }
-
-}
+    try {
+      await createInvoiceIfNeeded(order._id);
+    } catch (err) {
+      console.error("Invoice generation failed:", err.message);
+    }
 
     return res.json({
       success: true,
@@ -208,12 +209,6 @@ exports.placeOrder = async (req, res) => {
   }
 };
 
-
-
-
-
-
-
 exports.placeBuyNowOrder = async (req, res) => {
   const session = await mongoose.startSession();
   await session.startTransaction();
@@ -224,46 +219,47 @@ exports.placeBuyNowOrder = async (req, res) => {
 
     // Validate payment
     if (!["cod", "wallet"].includes(paymentMethod)) {
-      return res.status(400).json({ success: false, message: "Invalid payment method" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid payment method" });
     }
 
     // Validate address
     if (!address?.addressId || !address?.snapshot) {
-      return res.status(422).json({ success: false, message: "Address required" });
+      return res
+        .status(422)
+        .json({ success: false, message: "Address required" });
     }
 
     // Get BuyNow data
     const buyNow = await BuyNow.findOne({
       _id: buyNowId,
-      userId
-    }).populate("product.productId").session(session);
-
-    
+      userId,
+    })
+      .populate("product.productId")
+      .session(session);
 
     if (!buyNow) {
       return res.status(404).json({
         success: false,
-        message: "Buy Now session expired"
+        message: "Buy Now session expired",
       });
     }
 
-    const product = buyNow.product?.productId
+    const product = buyNow.product?.productId;
     const quantity = 1;
     const subTotal = product.salePrice;
     const grandTotal = subTotal; // no coupon
-    
 
     // Wallet payment
     let walletUsed = 0;
     if (paymentMethod === "wallet") {
       const wallet = await Wallet.findOne({ userId }).session(session);
-      
-      
 
       if (!wallet || wallet.balance < grandTotal) {
         return res.status(402).json({
           success: false,
-          message: "Insufficient wallet balance"
+          message: "Insufficient wallet balance",
         });
       }
 
@@ -273,40 +269,41 @@ exports.placeBuyNowOrder = async (req, res) => {
       wallet.transactionHistory.push({
         type: "debit",
         amount: grandTotal,
-        description: "Buy Now Order Payment"
+        description: "Buy Now Order Payment",
       });
 
       await wallet.save({ session });
-    }    
-    
+    }
 
     // Stock check
     if (product.quantity < quantity) {
       return res.status(409).json({
         success: false,
-        message: "Insufficient stock"
+        message: "Insufficient stock",
       });
     }
 
     // Deduct stock
     await Product.findByIdAndUpdate(
       product._id,
-      { $inc: { quantity: - quantity } },
-      { session }
+      { $inc: { quantity: -quantity } },
+      { session },
     );
 
     // Create order
     const order = new Order({
       userId,
-      items: [{
-        productId: product._id,
-        productName: product.productName,
-        productImage: product?.productImage[0],
-        quantity,
-        price: product.salePrice,
-        subtotal: subTotal,
-        itemStatus: "Confirmed"
-      }],
+      items: [
+        {
+          productId: product._id,
+          productName: product.productName,
+          productImage: product?.productImage[0],
+          quantity,
+          price: product.salePrice,
+          subtotal: subTotal,
+          itemStatus: "Confirmed",
+        },
+      ],
       address,
       checkoutType: "buyNow",
       subTotal,
@@ -314,38 +311,28 @@ exports.placeBuyNowOrder = async (req, res) => {
       grandTotal,
       walletAmountUsed: walletUsed,
       paymentMethod,
-      paymentStatus: paymentMethod === "cod" ? "N/A" : "Paid",
-      orderStatus: "Confirmed"
+      paymentStatus: paymentMethod === "cod" ? "Pending" : "Paid",
+      orderStatus: "Confirmed",
     });
 
-    
-
     await order.save({ session });
-
-
 
     // Remove BuyNow session
     await BuyNow.deleteOne({ _id: buyNowId }).session(session);
 
     await session.commitTransaction();
 
-    if (paymentMethod === "wallet") {
-  try {
-    await createInvoiceIfNeeded(order._id);
-  } catch (err) {
-    console.error("Invoice generation failed:", err.message);
-    // do NOT fail order — invoice can be regenerated later
-  }
-
-}
-
+    try {
+      await createInvoiceIfNeeded(order._id);
+    } catch (err) {
+      console.error("Invoice generation failed:", err.message);
+    }
 
     res.status(200).json({
       success: true,
       message: "Buy Now order placed",
-      orderId: order._id
+      orderId: order._id,
     });
-
   } catch (error) {
     await session.abortTransaction();
     res.status(500).json({ success: false, message: error.message });
@@ -353,14 +340,6 @@ exports.placeBuyNowOrder = async (req, res) => {
     session.endSession();
   }
 };
-
-
-
-
-
-
-
-
 
 exports.getUserOrders = async (req, res) => {
   try {
@@ -403,7 +382,6 @@ exports.getSingleOrder = async (req, res) => {
       .populate("items.productId")
       .lean();
 
-
     if (!order) {
       return res
         .status(404)
@@ -438,7 +416,7 @@ exports.orderCancel = async (req, res) => {
     // Add validation early
     if (reason && reason.length > 500) {
       const err = new Error(
-        "Cancellation reason too long (max 500 characters)"
+        "Cancellation reason too long (max 500 characters)",
       );
       err.statusCode = 400;
       throw err;
@@ -476,7 +454,7 @@ exports.orderCancel = async (req, res) => {
 
       const err = new Error(
         statusMsg[order.orderStatus] ||
-          `Cannot cancel order in ${order.orderStatus} status`
+          `Cannot cancel order in ${order.orderStatus} status`,
       );
       err.statusCode = 400;
       throw err;
@@ -504,7 +482,7 @@ exports.orderCancel = async (req, res) => {
         }
         product.quantity += item.quantity;
         await product.save({ session });
-      })
+      }),
     );
 
     // maxrefundable amount for safety to prevent double refund money
@@ -541,7 +519,7 @@ exports.orderCancel = async (req, res) => {
             },
           },
         },
-        { upsert: true, new: true, session }
+        { upsert: true, new: true, session },
       );
 
       if (!walletUpdate) {
@@ -608,7 +586,7 @@ exports.cancelSingleItem = async (req, res) => {
   try {
     const { orderId, itemId } = req.params;
     const { cancellationReason } = req.body;
-    
+
     const user = req.user;
 
     // validate orderid and itemid
@@ -624,7 +602,7 @@ exports.cancelSingleItem = async (req, res) => {
     // validate reason
     if (cancellationReason && cancellationReason.length > 500) {
       const err = new Error(
-        "Cancellation reason too long (max 500 characters)"
+        "Cancellation reason too long (max 500 characters)",
       );
       err.statusCode = 400;
       throw err;
@@ -653,7 +631,7 @@ exports.cancelSingleItem = async (req, res) => {
       };
 
       const err = new Error(
-        statusMsg[order.orderStatus] || "Cannot cancel item"
+        statusMsg[order.orderStatus] || "Cannot cancel item",
       );
       err.statusCode = 400;
       throw err;
@@ -684,7 +662,8 @@ exports.cancelSingleItem = async (req, res) => {
 
     // update item
     item.itemStatus = "Cancelled";
-    item.cancellationReason = cancellationReason?.trim() || "User requested cancellation";
+    item.cancellationReason =
+      cancellationReason?.trim() || "User requested cancellation";
     item.cancelledAt = new Date();
 
     // Restore stock
@@ -712,21 +691,20 @@ exports.cancelSingleItem = async (req, res) => {
 
     //count total items cancelled & total items
     const cancelledCount = order.items.filter(
-      (item) => item.itemStatus === "Cancelled"
+      (item) => item.itemStatus === "Cancelled",
     ).length;
     const totalCount = order.items.length;
 
     // update order status and save order
-   if (cancelledCount === totalCount) {
-  order.orderStatus = "Cancelled";
+    if (cancelledCount === totalCount) {
+      order.orderStatus = "Cancelled";
 
-  // ✅ Set order-level cancellation reason safely
-  order.cancellationReason = "Order cancelled due to item cancellations";
-  order.cancelledAt = new Date();
-} else if (cancelledCount > 0) {
-  order.orderStatus = "PartiallyCancelled";
-}
-
+      // ✅ Set order-level cancellation reason safely
+      order.cancellationReason = "Order cancelled due to item cancellations";
+      order.cancelledAt = new Date();
+    } else if (cancelledCount > 0) {
+      order.orderStatus = "PartiallyCancelled";
+    }
 
     await order.save({ session });
 
@@ -765,7 +743,7 @@ exports.cancelSingleItem = async (req, res) => {
             },
           },
         },
-        { upsert: true, new: true, session }
+        { upsert: true, new: true, session },
       );
 
       if (!walletUpdate) {
@@ -833,7 +811,7 @@ exports.cancelSingleItem = async (req, res) => {
   } catch (error) {
     await session.abortTransaction();
     console.error("cancelSingleItem error:", error);
-    console.log(error)
+    console.log(error);
     const status = error.statusCode || 500;
     return res.status(status).json({
       success: false,

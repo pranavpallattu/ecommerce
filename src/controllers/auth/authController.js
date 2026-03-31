@@ -33,7 +33,7 @@ exports.googleVerifyCallback = async (req, res) => {
 
     res.cookie("auth_token", token, cookieOptions);
 
-    return res.redirect(`${process.env.CLIENT_URL}/google-success`);
+    return res.redirect(`${process.env.CLIENT_URL}`);
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: "Google auth failed" });
