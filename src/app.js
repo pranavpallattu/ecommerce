@@ -20,6 +20,13 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"],
 }));
 
+
+app.post(
+  "/api/user/payment/webhook",
+  express.raw({ type: "application/json" }),
+  paymentController.razorpayWebhook
+);
+
 // Then everything else
 app.use(express.json());
 app.use(cookieParser());
