@@ -1,7 +1,7 @@
 const generateSalesReport = require("../../services/salesReportService");
 const ExcelJS = require("exceljs");
 const PDFDocument = require("pdfkit");
-const formatCurrency = require("../../utils/formatCurrency");
+// const formatCurrency = require("../../utils/formatCurrency");
 
 exports.getSalesReport = async (req, res) => {
   try {
@@ -9,7 +9,7 @@ exports.getSalesReport = async (req, res) => {
 
     const data = await generateSalesReport({ filterType, startDate, endDate });
     console.log(data);
-    
+
     return res.status(200).json({
       success: true,
       message: "Sales report summary fetched successfully",
@@ -21,6 +21,14 @@ exports.getSalesReport = async (req, res) => {
   }
 };
 
+// src/controllers/salesController.js
+const dayjs = require("dayjs");
+
+const formatCurrency = (amount) => {
+  if (amount == null || isNaN(amount)) return "₹0";
+  return `₹${Number(amount).toLocaleString("en-IN")}`;
+};
+
 exports.downloadSalesPDF = async (req, res) => {
   try {
     const data = await generateSalesReport(req.body);
@@ -28,147 +36,174 @@ exports.downloadSalesPDF = async (req, res) => {
     const doc = new PDFDocument({
       size: "A4",
       margin: 50,
+      compress: true,
     });
 
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
-      "attachment; filename=sales_report.pdf"
+      'attachment; filename="Sales_Report_OneBazaar.pdf"',
     );
 
     doc.pipe(res);
 
-    // ---------------------------
-    // Header
-    // ---------------------------
+    // ====================== HEADER WITH LOGO ======================
+    const logoUrl =
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSgiPftJFEcFuclHRqhqXpbM58OXt2F5zRmtA&s";
+
+    // Try to add logo
+    try {
+      doc.image(logoUrl, 48, 40, { width: 85 });
+    } catch (e) {
+      // Fallback if image fails to load
+      doc
+        .fontSize(68)
+        .font("Helvetica-Bold")
+        .fillColor("#1e40af")
+        .text("1", 65, 38);
+    }
+
+    // App Name
+    doc
+      .fontSize(26)
+      .font("Helvetica-Bold")
+      .fillColor("#1e40af")
+      .text("One Bazaar", 145, 52);
+
+    // Tagline
+    doc
+      .fontSize(11)
+      .font("Helvetica")
+      .fillColor("#64748b")
+      .text("One World. Infinite Finds.", 145, 80);
+
+    // Generated Date
+    doc
+      .fontSize(10)
+      .fillColor("#64748b")
+      .text(`Generated: ${dayjs().format("DD MMMM YYYY • hh:mm A")}`, 380, 65, {
+        align: "right",
+      });
+
+    doc.moveDown(4);
+
+    // Blue Divider
+    doc.moveTo(50, doc.y).lineTo(550, doc.y).lineWidth(2.5).stroke("#1e40af");
+    doc.moveDown(2.5);
+
+    // ====================== CENTERED TITLE ======================
     doc
       .fontSize(22)
       .font("Helvetica-Bold")
+      .fillColor("#1e3a8a")
       .text("Sales Report", { align: "center" });
 
+    doc.moveDown(0.5);
+
     doc
-      .moveDown(0.5)
       .fontSize(12)
       .font("Helvetica")
-      .text(`Generated On: ${new Date().toLocaleString()}`, {
+      .fillColor("#475569")
+      .text(`${data.startDate} — ${data.endDate}`, { align: "center" });
+
+    doc.moveDown(2.5);
+
+    // ====================== OVERALL SUMMARY ======================
+    doc
+      .fontSize(16)
+      .font("Helvetica-Bold")
+      .fillColor("#1e40af")
+      .text("Overall Summary");
+
+    doc.moveDown(0.8);
+
+    const summaryX = 70;
+    doc.fontSize(12).font("Helvetica");
+
+    const summaryData = [
+      ["Total Orders", data.totalOrders],
+      ["Cart Orders", data.cartOrders],
+      ["Buy Now Orders", data.buynowOrders],
+      ["Total Revenue", formatCurrency(data.totalAmount)],
+      ["Total Discount", formatCurrency(data.totalDiscount)],
+      ["Coupon Deduction", formatCurrency(data.couponDeduction)],
+      ["Total Refunded", formatCurrency(data.totalRefunded)],
+    ];
+
+    summaryData.forEach(([label, value]) => {
+      doc.text(label, summaryX, doc.y);
+      doc.text(String(value), 400, doc.y, { align: "right" });
+      doc.moveDown(0.7);
+    });
+
+    doc.moveDown(1.5);
+    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke("#94a3b8");
+    doc.moveDown(1.5);
+
+    // ====================== ORDER STATUS BREAKDOWN ======================
+    doc
+      .fontSize(16)
+      .font("Helvetica-Bold")
+      .fillColor("#1e40af")
+      .text("Order Status Breakdown");
+
+    doc.moveDown(0.8);
+
+    doc.fontSize(11).font("Helvetica-Bold");
+    doc.text("Status", 70, doc.y);
+    doc.text("Count", 420, doc.y);
+    doc.moveDown(0.4);
+    doc.moveTo(60, doc.y).lineTo(530, doc.y).stroke("#64748b");
+    doc.moveDown(0.5);
+
+    doc.font("Helvetica").fontSize(11).fillColor("#334155");
+
+    const statusList = [
+      ["Pending", data.pending],
+      ["Confirmed", data.confirmed],
+      ["Processing", data.processing],
+      ["Shipped", data.shipped],
+      ["Delivered", data.delivered],
+      ["Cancelled", data.cancelled],
+      ["Partially Cancelled", data.partiallyCancelled],
+      ["Returned", data.returned],
+      ["Partially Returned", data.partiallyReturned],
+      ["Return Pending", data.returnPending],
+      ["Return Rejected", data.returnRejected],
+    ];
+
+    statusList.forEach(([status, count]) => {
+      doc.text(status, 70, doc.y);
+      doc.text(String(count || 0), 420, doc.y, { align: "right" });
+      doc.moveDown(0.65);
+    });
+
+    // ====================== FOOTER ======================
+    doc
+      .fontSize(10)
+      .fillColor("#64748b")
+      .text("One Bazaar • One World. Infinite Finds.", 50, 780, {
         align: "center",
       });
 
-    doc.moveDown(1.5);
-
-    // Divider
-    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-
-    doc.moveDown(1);
-
-    // ---------------------------
-    // Date Range Section
-    // ---------------------------
-    doc
-      .fontSize(14)
-      .font("Helvetica-Bold")
-      .text("Date Range", { underline: true });
-    doc.moveDown(0.5);
-
-    doc.fontSize(12).font("Helvetica");
-    doc.text(`Start Date: ${data.startDate}`);
-    doc.text(`End Date: ${data.endDate}`);
-
-    doc.moveDown(1);
-
-    // Divider
-    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-
-    doc.moveDown(1);
-
-    // ---------------------------
-    // Overall Summary
-    // ---------------------------
-    doc
-      .fontSize(14)
-      .font("Helvetica-Bold")
-      .text("Overall Summary", { underline: true });
-    doc.moveDown(0.5);
-
-    doc.fontSize(12).font("Helvetica");
-    doc.text(`Total Orders: ${data.totalOrders}`);
-    doc.text(`Cart Orders: ${data.cartOrders}`);
-    doc.text(`Buy Now Orders: ${data.buynowOrders}`);
-    doc.text(`Total Revenue:  ${formatCurrency(data.totalAmount)}`);
-    doc.text(`Total Discount: ${formatCurrency(data.totalDiscount)}`);
-    doc.text(`Coupon Deduction: ${formatCurrency(data.couponDeduction)}`);
-    doc.text(`Total Refunded: ${formatCurrency(data.totalRefunded)}`);
-
-    doc.moveDown(1);
-
-    // Divider
-    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-
-    doc.moveDown(1);
-
-    // ---------------------------
-    // Order Status Breakdown (Table Style)
-    // ---------------------------
-    doc
-      .fontSize(14)
-      .font("Helvetica-Bold")
-      .text("Order Status Breakdown", { underline: true });
-    doc.moveDown(0.7);
-
-    // Table Header
-    doc.fontSize(12).font("Helvetica-Bold");
-    doc.text("Status", 60, doc.y);
-    doc.text("Count", 400, doc.y);
-
-    // Line below header
-    doc.moveDown(0.3);
-    doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
-    doc.moveDown(0.3);
-
-    // Table Rows
-    doc.font("Helvetica");
-    const rows = [
-      ["Delivered", data.delivered],
-      ["Cancelled", data.cancelled],
-      ["Shipped", data.shipped],
-      ["Returned", data.returned],
-      ["Pending", data.pending],
-      ["Processing", data.processing],
-    ];
-
-    rows.forEach(([label, value]) => {
-      doc.text(label, 60, doc.y);
-      doc.text(String(value), 400, doc.y);
-      doc.moveDown(0.4);
-    });
-
-    doc.moveDown(2);
-
-    // ---------------------------
-    // Footer
-    // ---------------------------
-    doc
-      .fontSize(10)
-      .fillColor("gray")
-      .text("Generated by Admin Dashboard", 50, 780, { align: "center" });
-
     doc.end();
   } catch (err) {
-    console.log(err);
-    res.status(500).json({ success: false, message: err.message });
+    console.error("PDF Generation Error:", err);
+    res
+      .status(500)
+      .json({ success: false, message: "Failed to generate PDF report" });
   }
 };
-
 exports.downloadSalesExcel = async (req, res) => {
   try {
     const data = await generateSalesReport(req.body);
 
     const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet("Sales Report");
+    const sheet = workbook.addWorksheet("One Bazaar Sales Report");
 
     // ---------- HEADER ----------
     sheet.mergeCells("A1", "B1");
-    sheet.getCell("A1").value = "Sales Report";
+    sheet.getCell("A1").value = "One Bazaar Sales Report";
     sheet.getCell("A1").font = { size: 18, bold: true };
     sheet.getCell("A1").alignment = { horizontal: "center" };
 
@@ -183,7 +218,7 @@ exports.downloadSalesExcel = async (req, res) => {
 
     // ---------- SUMMARY ----------
     sheet.addRow(["Total Orders", data.totalOrders]);
-        sheet.addRow(["Cart Orders", data.cartOrders]);
+    sheet.addRow(["Cart Orders", data.cartOrders]);
     sheet.addRow(["Buy Now Orders", data.buynowOrders]);
 
     sheet.addRow(["Total Revenue", `₹${data.totalAmount}`]);
@@ -196,12 +231,17 @@ exports.downloadSalesExcel = async (req, res) => {
     // ---------- STATUS TABLE ----------
     sheet.addRow(["Status", "Count"]).font = { bold: true };
     const rows = [
+      ["Pending", data.pending],
+      ["Confirmed", data.confirmed],
+      ["Processing", data.processing],
+      ["Shipped", data.shipped],
       ["Delivered", data.delivered],
       ["Cancelled", data.cancelled],
-      ["Shipped", data.shipped],
+      ["Partially Cancelled", data.partiallyCancelled],
       ["Returned", data.returned],
-      ["Pending", data.pending],
-      ["Processing", data.processing],
+      ["Partially Returned", data.partiallyReturned],
+      ["Return Pending", data.returnPending],
+      ["Return Rejected", data.returnRejected],
     ];
     sheet.addRows(rows);
 
@@ -213,11 +253,11 @@ exports.downloadSalesExcel = async (req, res) => {
     // ---------- DOWNLOAD ----------
     res.setHeader(
       "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     );
     res.setHeader(
       "Content-Disposition",
-      "attachment; filename=sales_report.xlsx"
+      "attachment; filename=sales_report.xlsx",
     );
 
     await workbook.xlsx.write(res);
