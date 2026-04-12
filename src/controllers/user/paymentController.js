@@ -389,24 +389,33 @@ exports.verifyBuyNowPayment = async (req, res) => {
 
 exports.razorpayWebhook = async (req, res) => {
   try {
-    console.log("webhook called");
+ console.log("🔥 Webhook called");
 
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
     const signature = req.headers["x-razorpay-signature"];
 
+    // ✅ Convert buffer to string
+    const bodyString = req.body.toString();
+
+    // ✅ Create expected signature
     const expectedSignature = crypto
       .createHmac("sha256", webhookSecret)
-      .update(req.body)
+      .update(bodyString)
       .digest("hex");
 
+    // ❌ Signature mismatch (Postman will fail here — that’s OK)
     if (expectedSignature !== signature) {
+      console.log("❌ Invalid signature");
       return res.status(400).json({
         success: false,
         message: "Invalid webhook signature",
       });
     }
 
-    const body = JSON.parse(req.body);
+    // ✅ Parse JSON safely
+    const body = JSON.parse(bodyString);
+
+    console.log("📦 Event:", body.event);
 
     const event = body.event;
     const payment = body.payload.payment.entity;
@@ -415,6 +424,7 @@ exports.razorpayWebhook = async (req, res) => {
     const razorpayPaymentId = payment.id;
 
     const order = await Order.findOne({ razorpayOrderId });
+
 
     if (!order) {
       return res.status(200).json({
