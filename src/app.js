@@ -8,6 +8,8 @@ const passport = require("passport");
 const authRouter = require("./routes/authRouter");
 const adminRouter = require("./routes/adminRouter");
 const userRouter = require("./routes/userRouter");
+const paymentController=require("../src/controllers/user/paymentController")
+
 require("./config/passport");
 
 const app = express();
