@@ -15,6 +15,8 @@ passport.use(
       try {
         const email = profile.emails[0].value;
 
+        console.log("Google email:", email);
+
         let user = await User.findOne({ emailId: email });
 
         if (!user) {
