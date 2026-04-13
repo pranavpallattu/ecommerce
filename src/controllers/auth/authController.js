@@ -18,6 +18,7 @@ const cookieOptions = {
 exports.googleVerifyCallback = async (req, res) => {
   try {
     const user = req.user;
+    console.log(user)
 
     if (user.isBlocked) {
       return res.status(403).json({ message: "Account blocked" });
