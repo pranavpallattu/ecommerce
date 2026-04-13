@@ -10,7 +10,7 @@ const sendSMS = require("../../config/twiliosms");
 
 const cookieOptions = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production", 
+  secure: process.env.NODE_ENV === "production",
   sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
   path: "/",
 };
@@ -18,7 +18,7 @@ const cookieOptions = {
 exports.googleVerifyCallback = async (req, res) => {
   try {
     const user = req.user;
-    console.log(user)
+    console.log(user);
 
     if (user.isBlocked) {
       return res.status(403).json({ message: "Account blocked" });
@@ -29,12 +29,12 @@ exports.googleVerifyCallback = async (req, res) => {
     const token = jwt.sign(
       { _id: user._id, role },
       process.env.JWT_SECRET_KEY,
-      { expiresIn: "1d" }
+      { expiresIn: "1d" },
     );
 
     res.cookie("auth_token", token, cookieOptions);
 
-    return res.redirect(`${process.env.CLIENT_URL}`);
+    return res.redirect(`${process.env.CLIENT_URL}/google-success`);
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: "Google auth failed" });
@@ -200,38 +200,37 @@ exports.verifyAuthOtp = async (req, res) => {
     let user = await User.findOne({ emailId: normalizedEmail });
 
     if (user) {
-    const role = user.isAdmin ? "admin" : "user";
+      const role = user.isAdmin ? "admin" : "user";
 
-    const token = jwt.sign(
-      { _id: user._id, role },
-      process.env.JWT_SECRET_KEY,
-      { expiresIn: "1d" }
-    );
+      const token = jwt.sign(
+        { _id: user._id, role },
+        process.env.JWT_SECRET_KEY,
+        { expiresIn: "1d" },
+      );
 
-//     const cookieName = role === "admin" ? "admin_token" : "user_token";
+      //     const cookieName = role === "admin" ? "admin_token" : "user_token";
 
-// const cookieOptionsUser = {
-//   httpOnly: true,
-//   secure: process.env.NODE_ENV === "production",
-//   sameSite: "lax",
-//   path: "/", // user everywhere
-// };
+      // const cookieOptionsUser = {
+      //   httpOnly: true,
+      //   secure: process.env.NODE_ENV === "production",
+      //   sameSite: "lax",
+      //   path: "/", // user everywhere
+      // };
 
-// const cookieOptionsAdmin = {
-//   httpOnly: true,
-//   secure: process.env.NODE_ENV === "production",
-//   sameSite: "lax",
-//   path: "/api/auth/admin", // 🔥 admin only for /api/auth/admin routes
-// };
+      // const cookieOptionsAdmin = {
+      //   httpOnly: true,
+      //   secure: process.env.NODE_ENV === "production",
+      //   sameSite: "lax",
+      //   path: "/api/auth/admin", // 🔥 admin only for /api/auth/admin routes
+      // };
 
-// if (role === "admin") {
-//   res.cookie("admin_token", token, cookieOptionsAdmin);
-// } else {
-//   res.cookie("user_token", token, cookieOptionsUser);
-// }
+      // if (role === "admin") {
+      //   res.cookie("admin_token", token, cookieOptionsAdmin);
+      // } else {
+      //   res.cookie("user_token", token, cookieOptionsUser);
+      // }
 
-
-    res.cookie("auth_token", token, cookieOptions);
+      res.cookie("auth_token", token, cookieOptions);
 
       await Otp.deleteMany({ emailId: normalizedEmail });
 
@@ -254,38 +253,36 @@ exports.verifyAuthOtp = async (req, res) => {
       isAdmin: false,
     });
 
-   const role = user.isAdmin ? "admin" : "user";
+    const role = user.isAdmin ? "admin" : "user";
 
     const token = jwt.sign(
       { _id: user._id, role },
       process.env.JWT_SECRET_KEY,
-      { expiresIn: "1d" }
+      { expiresIn: "1d" },
     );
 
-//     const cookieName = role === "admin" ? "admin_token" : "user_token";
+    //     const cookieName = role === "admin" ? "admin_token" : "user_token";
 
-// const cookieOptionsUser = {
-//   httpOnly: true,
-//   secure: process.env.NODE_ENV === "production",
-//   sameSite: "lax",
-//   path: "/", // user everywhere
-// };
+    // const cookieOptionsUser = {
+    //   httpOnly: true,
+    //   secure: process.env.NODE_ENV === "production",
+    //   sameSite: "lax",
+    //   path: "/", // user everywhere
+    // };
 
-// const cookieOptionsAdmin = {
-//   httpOnly: true,
-//   secure: process.env.NODE_ENV === "production",
-//   sameSite: "lax",
-//   path: "/api/auth/admin", // 🔥 admin only for /api/auth/admin routes
-// };
-// if (role === "admin") {
-//   res.cookie("admin_token", token, cookieOptionsAdmin);
-// } else {
-//   res.cookie("user_token", token, cookieOptionsUser);
-// }
+    // const cookieOptionsAdmin = {
+    //   httpOnly: true,
+    //   secure: process.env.NODE_ENV === "production",
+    //   sameSite: "lax",
+    //   path: "/api/auth/admin", // 🔥 admin only for /api/auth/admin routes
+    // };
+    // if (role === "admin") {
+    //   res.cookie("admin_token", token, cookieOptionsAdmin);
+    // } else {
+    //   res.cookie("user_token", token, cookieOptionsUser);
+    // }
 
-res.cookie("auth_token", token, cookieOptions);
-
-
+    res.cookie("auth_token", token, cookieOptions);
 
     await Otp.deleteMany({ emailId: normalizedEmail });
 
@@ -326,7 +323,6 @@ exports.logout = (req, res) => {
 // controllers/adminAuthController.js
 
 // exports.adminLogout = (req, res) => {
-
 
 // const cookieOptionsAdmin = {
 //   httpOnly: true,
