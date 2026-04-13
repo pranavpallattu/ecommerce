@@ -8,27 +8,30 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID, // from Google Cloud Console
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-callbackURL: "https://ecommerce-8tjk.onrender.com/api/auth/google/callback",  },
+      callbackURL:
+        "https://ecommerce-8tjk.onrender.com/api/auth/google/callback",
+    },
     async (accessToken, refreshToken, profile, done) => {
       try {
-        let user = await User.findOne({
-          $or: [{ googleId: profile.id }, { emailId: profile.emails[0].value }],
-        });
+        const email = profile.emails[0].value;
+
+        let user = await User.findOne({ emailId: email });
 
         if (!user) {
           user = new User({
             googleId: profile.id,
-            emailId: profile.emails[0].value,
+            emailId: email,
             name: profile.displayName,
             isAdmin: false,
           });
           await user.save();
         } else {
-          // attach googleId if missing
+          // 🚨 NEVER override admin accidentally
           if (!user.googleId) {
             user.googleId = profile.id;
-            await user.save();
           }
+
+          await user.save();
         }
 
         return done(null, user);
