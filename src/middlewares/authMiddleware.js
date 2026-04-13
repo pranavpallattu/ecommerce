@@ -1,11 +1,6 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/userSchema");
 
-
-
-
-
-
 const authMiddleware = async (req, res, next) => {
   try {
     const token = req.cookies.auth_token;
@@ -18,12 +13,13 @@ const authMiddleware = async (req, res, next) => {
 
     req.user = user;
     req.role = decoded.role;
+    console.log("TOKEN:", token);
+    console.log("DECODED:", decoded);
     next();
   } catch {
     return res.status(401).json({ message: "Invalid token" });
   }
 };
-
 
 const adminMiddleware = (req, res, next) => {
   if (req.role !== "admin") {
@@ -32,18 +28,7 @@ const adminMiddleware = (req, res, next) => {
   next();
 };
 
-
-
-
-
-
-
-
-
-
-
 module.exports = { authMiddleware, adminMiddleware };
-
 
 // const userAuthMiddleware = async (req, res, next) => {
 //   try {
