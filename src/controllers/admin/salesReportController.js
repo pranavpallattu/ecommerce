@@ -1,7 +1,7 @@
 const generateSalesReport = require("../../services/salesReportService");
 const ExcelJS = require("exceljs");
 const PDFDocument = require("pdfkit");
-// const formatCurrency = require("../../utils/formatCurrency");
+const formatCurrency = require("../../utils/formatCurrency");
 
 exports.getSalesReport = async (req, res) => {
   try {
@@ -24,10 +24,6 @@ exports.getSalesReport = async (req, res) => {
 // src/controllers/salesController.js
 const dayjs = require("dayjs");
 
-const formatCurrency = (amount) => {
-  if (amount == null || isNaN(amount)) return "₹0";
-  return `₹${Number(amount).toLocaleString("en-IN")}`;
-};
 
 exports.downloadSalesPDF = async (req, res) => {
   try {
