@@ -15,17 +15,17 @@ const {authMiddleware, adminMiddleware}=require("../middlewares/authMiddleware")
 const upload = require("../middlewares/multerMiddleware")
 
 adminRouter.post("/category/add" ,authMiddleware, adminMiddleware,categoryController.addCategoryController)
-adminRouter.patch("/category/edit/:id" ,authMiddleware, adminMiddleware,categoryController.editCategoryController)
+adminRouter.put("/category/edit/:id" ,authMiddleware, adminMiddleware,categoryController.editCategoryController)
 adminRouter.post("/category/list/:id" ,authMiddleware, adminMiddleware,categoryController.listCategoryController)
 adminRouter.post("/category/unlist/:id" ,authMiddleware, adminMiddleware,categoryController.unListCategoryController)
-adminRouter.patch("/category/softDelete/:id" ,authMiddleware, adminMiddleware,categoryController.softDeleteCategoryController)
+adminRouter.put("/category/softDelete/:id" ,authMiddleware, adminMiddleware,categoryController.softDeleteCategoryController)
 adminRouter.get("/category/getCategory" ,authMiddleware, adminMiddleware,categoryController.getCategoriesController)
 
 adminRouter.post("/product/addProduct" ,authMiddleware, adminMiddleware,upload.fields([{ name: "productImage", maxCount: 4 }]),productController.addProduct)
 adminRouter.put("/product/editProduct/:id" ,authMiddleware, adminMiddleware,upload.fields([{name:"productImage",maxCount:4}]),productController.editProduct)
 adminRouter.get("/product/:id" ,authMiddleware, adminMiddleware,productController.getProduct)
-adminRouter.patch("/product/list/:id" ,authMiddleware, adminMiddleware,productController.listProduct)
-adminRouter.patch("/product/unlist/:id" ,authMiddleware, adminMiddleware,productController.unListProduct)
+adminRouter.put("/product/list/:id" ,authMiddleware, adminMiddleware,productController.listProduct)
+adminRouter.put("/product/unlist/:id" ,authMiddleware, adminMiddleware,productController.unListProduct)
 adminRouter.get("/products" ,authMiddleware, adminMiddleware,productController.getProducts)
 adminRouter.delete("/product/delete/:id" ,authMiddleware, adminMiddleware,productController.softDeleteProduct)
 
@@ -34,7 +34,7 @@ adminRouter.delete("/product/delete/:id" ,authMiddleware, adminMiddleware,produc
 
 
 adminRouter.get("/customers" ,authMiddleware, adminMiddleware, customerController.getAllCustomersController)
-adminRouter.patch("/user/:id" ,authMiddleware, adminMiddleware,customerController.updateUserStatusController)
+adminRouter.put("/user/:id" ,authMiddleware, adminMiddleware,customerController.updateUserStatusController)
 
 
 // CREATE
@@ -44,10 +44,10 @@ adminRouter.post("/coupons" ,authMiddleware, adminMiddleware, couponController.a
 adminRouter.get("/coupons" ,authMiddleware, adminMiddleware, couponController.getCouponController);
 
 // UPDATE STATUS (activate / deactivate)
-adminRouter.patch("/coupons/:id/status" ,authMiddleware, adminMiddleware, couponController.updateCouponStatusController);
+adminRouter.put("/coupons/:id/status" ,authMiddleware, adminMiddleware, couponController.updateCouponStatusController);
 
 // EDIT COUPON DETAILS
-adminRouter.patch( "/coupons/:id" ,authMiddleware, adminMiddleware, couponController.editCouponController);
+adminRouter.put( "/coupons/:id" ,authMiddleware, adminMiddleware, couponController.editCouponController);
 
 // SOFT DELETE
 adminRouter.delete( "/coupons/:id" ,authMiddleware, adminMiddleware, couponController.softDeleteCouponController);
@@ -56,22 +56,22 @@ adminRouter.delete( "/coupons/:id" ,authMiddleware, adminMiddleware, couponContr
 
 adminRouter.get("/orders" ,authMiddleware, adminMiddleware,orderController.listOrders)
 
-adminRouter.patch("/orders/return/reject/:orderId/:itemId" ,authMiddleware, adminMiddleware,orderController.itemReturnReject);
+adminRouter.put("/orders/return/reject/:orderId/:itemId" ,authMiddleware, adminMiddleware,orderController.itemReturnReject);
 
 
 adminRouter.get("/orders/:orderId" ,authMiddleware, adminMiddleware,orderController.viewOrder);
-adminRouter.patch("/orders/:orderId" ,authMiddleware, adminMiddleware,orderController.orderStatus);
+adminRouter.put("/orders/:orderId" ,authMiddleware, adminMiddleware,orderController.orderStatus);
 
 
 // ORDER RETURNS
-adminRouter.patch("/orders/:orderId/return/approve" ,authMiddleware, adminMiddleware, orderController.orderReturnApprove);
+adminRouter.put("/orders/:orderId/return/approve" ,authMiddleware, adminMiddleware, orderController.orderReturnApprove);
 
-adminRouter.patch("/orders/:orderId/return/reject" ,authMiddleware, adminMiddleware, orderController.orderReturnReject);
+adminRouter.put("/orders/:orderId/return/reject" ,authMiddleware, adminMiddleware, orderController.orderReturnReject);
 
 // ITEM RETURNS
-adminRouter.patch("/orders/:orderId/items/:itemId/return/approve" ,authMiddleware, adminMiddleware, orderController.itemReturnApprove);
+adminRouter.put("/orders/:orderId/items/:itemId/return/approve" ,authMiddleware, adminMiddleware, orderController.itemReturnApprove);
 
-adminRouter.patch("/orders/:orderId/items/:itemId/return/reject" ,authMiddleware, adminMiddleware, orderController.itemReturnReject);
+adminRouter.put("/orders/:orderId/items/:itemId/return/reject" ,authMiddleware, adminMiddleware, orderController.itemReturnReject);
 
 // NOTIFICATIONS (RETURN REQUESTS)
 adminRouter.get("/notifications/returns" ,authMiddleware, adminMiddleware, orderController.getReturnPendingRequests);

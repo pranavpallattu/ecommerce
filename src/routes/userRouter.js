@@ -28,7 +28,7 @@ userRouter.get("/wishlist",authMiddleware ,wishlistController.getWishlist)
 userRouter.post("/addresses",authMiddleware ,addressController.addAddressController)
 userRouter.get("/addresses",authMiddleware ,addressController.getAddressController)
 userRouter.delete("/addresses/:id",authMiddleware ,addressController.softDeleteAddressController)
-userRouter.patch("/addresses/:id",authMiddleware ,addressController.editAddressController)
+userRouter.put("/addresses/:id",authMiddleware ,addressController.editAddressController)
 
 
 userRouter.post("/cart/applyCoupon",authMiddleware ,couponController.applyCoupon)
@@ -36,9 +36,8 @@ userRouter.delete("/cart/removeCoupon",authMiddleware ,couponController.removeCo
 userRouter.get("/cart/coupons",authMiddleware ,couponController.getCoupons)
 
 
-userRouter.patch("/addresses/:id",authMiddleware ,addressController.editAddressController)
 
-userRouter.patch("/cart/updatequantity",authMiddleware ,cartController.updateQuantity)
+userRouter.put("/cart/updatequantity",authMiddleware ,cartController.updateQuantity)
 userRouter.post("/cart/:productId",authMiddleware ,cartController.addToCart)
 userRouter.get("/cart",authMiddleware ,cartController.getCart)
 userRouter.delete("/cart/:productId",authMiddleware ,cartController.removeFromCart)
