@@ -378,7 +378,7 @@ module.exports = async function generateInvoice(order) {
   return {
     invoiceNumber,
     storagePath,
-    invoiceUrl: urlData.signedUrl,
+    // invoiceUrl: urlData.signedUrl,
     generatedAt: new Date(),
   };
 };

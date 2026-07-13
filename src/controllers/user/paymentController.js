@@ -207,14 +207,33 @@ exports.verifyPayment = async (req, res) => {
     });
 
     await order.save({ session });
-    await Cart.deleteOne({ userId: user._id }).session(session);
 
+    // increment coupon usage AFTER successful order creation
+    if (orderDetails?.couponId) {
+      await Coupon.findByIdAndUpdate(
+        orderDetails.couponId,
+        { $inc: { usedCount: 1 } },
+        { session },
+      );
+
+      if (!user.usedCoupons) {
+        user.usedCoupons = [];
+      }
+
+      user.usedCoupons.push(orderDetails.couponId);
+
+      await user.save({ session });
+    }
+
+    await Cart.deleteOne({ userId: user._id }).session(session);
     await session.commitTransaction();
     await createInvoiceIfNeeded(order._id);
 
-    return res
-      .status(200)
-      .json({ success: true, message: "Payment verified & order saved",  orderId: order._id });
+    return res.status(200).json({
+      success: true,
+      message: "Payment verified & order saved",
+      orderId: order._id,
+    });
   } catch (error) {
     await session.abortTransaction();
     console.error("verifyPayment error:", error);
@@ -389,7 +408,7 @@ exports.verifyBuyNowPayment = async (req, res) => {
 
 exports.razorpayWebhook = async (req, res) => {
   try {
- console.log("🔥 Webhook called");
+    console.log("🔥 Webhook called");
 
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
     const signature = req.headers["x-razorpay-signature"];
@@ -421,10 +440,8 @@ exports.razorpayWebhook = async (req, res) => {
     const payment = body.payload.payment.entity;
 
     const razorpayOrderId = payment.order_id;
-    const razorpayPaymentId = payment.id;
 
     const order = await Order.findOne({ razorpayOrderId });
-
 
     if (!order) {
       return res.status(200).json({
@@ -434,28 +451,9 @@ exports.razorpayWebhook = async (req, res) => {
     }
 
     if (event === "payment.captured") {
-      if (order.paymentStatus === "Paid") {
-        return res.status(200).json({
-          success: true,
-          message: "Already processed",
-        });
-      }
-
-      order.paymentStatus = "Paid";
-      order.orderStatus = "Confirmed";
-      order.razorpayPaymentId = razorpayPaymentId;
-
-      order.items.forEach((item) => {
-        if (item.itemStatus === "Pending") {
-          item.itemStatus = "Confirmed";
-        }
-      });
-
-      await order.save();
-      await createInvoiceIfNeeded(order._id);
-
       try {
         const phone = order.address?.snapshot?.phone;
+
         if (phone) {
           const formattedPhone = phone.startsWith("+") ? phone : `+91${phone}`;
 
@@ -466,36 +464,6 @@ exports.razorpayWebhook = async (req, res) => {
         }
       } catch (err) {
         console.error("SMS failed:", err.message);
-      }
-    }
-
-    if (event === "payment.failed") {
-      if (order.paymentStatus === "Paid") {
-        return res.status(200).json({
-          success: true,
-          message: "Order already paid, ignoring failed event",
-        });
-      }
-
-      order.paymentStatus = "Failed";
-      order.orderStatus = "Cancelled";
-
-      order.items.forEach((item) => {
-        if (item.itemStatus === "Pending") {
-          item.itemStatus = "Cancelled";
-        }
-      });
-
-      await order.save();
-
-      const phone = order.address?.snapshot?.phone;
-      if (phone) {
-        const formattedPhone = phone.startsWith("+") ? phone : `+91${phone}`;
-
-        await sendSMS(
-          formattedPhone,
-          ` Payment failed for order #${order._id}. Please try again.`,
-        );
       }
     }
 
@@ -511,3 +479,127 @@ exports.razorpayWebhook = async (req, res) => {
     });
   }
 };
+
+// exports.razorpayWebhook = async (req, res) => {
+//   try {
+//     console.log("🔥 Webhook called");
+
+//     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+//     const signature = req.headers["x-razorpay-signature"];
+
+//     // ✅ Convert buffer to string
+//     const bodyString = req.body.toString();
+
+//     // ✅ Create expected signature
+//     const expectedSignature = crypto
+//       .createHmac("sha256", webhookSecret)
+//       .update(bodyString)
+//       .digest("hex");
+
+//     // ❌ Signature mismatch (Postman will fail here — that’s OK)
+//     if (expectedSignature !== signature) {
+//       console.log("❌ Invalid signature");
+//       return res.status(400).json({
+//         success: false,
+//         message: "Invalid webhook signature",
+//       });
+//     }
+
+//     // ✅ Parse JSON safely
+//     const body = JSON.parse(bodyString);
+
+//     console.log("📦 Event:", body.event);
+
+//     const event = body.event;
+//     const payment = body.payload.payment.entity;
+
+//     const razorpayOrderId = payment.order_id;
+//     const razorpayPaymentId = payment.id;
+
+//     const order = await Order.findOne({ razorpayOrderId });
+
+//     if (!order) {
+//       return res.status(200).json({
+//         success: true,
+//         message: "Order not found",
+//       });
+//     }
+
+//     if (event === "payment.captured") {
+//       if (order.paymentStatus === "Paid") {
+//         return res.status(200).json({
+//           success: true,
+//           message: "Already processed",
+//         });
+//       }
+
+//       // order.paymentStatus = "Paid";
+//       // order.orderStatus = "Confirmed";
+//       order.razorpayPaymentId = razorpayPaymentId;
+
+//       // order.items.forEach((item) => {
+//       //   if (item.itemStatus === "Pending") {
+//       //     item.itemStatus = "Confirmed";
+//       //   }
+//       // });
+
+//       // await order.save();
+//       await createInvoiceIfNeeded(order._id);
+
+//       try {
+//         const phone = order.address?.snapshot?.phone;
+//         if (phone) {
+//           const formattedPhone = phone.startsWith("+") ? phone : `+91${phone}`;
+
+//           await sendSMS(
+//             formattedPhone,
+//             `✅ Your order #${order._id} has been confirmed successfully.`,
+//           );
+//         }
+//       } catch (err) {
+//         console.error("SMS failed:", err.message);
+//       }
+//     }
+
+//     // if (event === "payment.failed") {
+//     //   if (order.paymentStatus === "Paid") {
+//     //     return res.status(200).json({
+//     //       success: true,
+//     //       message: "Order already paid, ignoring failed event",
+//     //     });
+//     //   }
+
+//     //   // order.paymentStatus = "Failed";
+//     //   // order.orderStatus = "Cancelled";
+
+//     //   // order.items.forEach((item) => {
+//     //   //   if (item.itemStatus === "Pending") {
+//     //   //     item.itemStatus = "Cancelled";
+//     //   //   }
+//     //   // });
+
+//     //   // await order.save();
+
+//     //   const phone = order.address?.snapshot?.phone;
+//     //   if (phone) {
+//     //     const formattedPhone = phone.startsWith("+") ? phone : `+91${phone}`;
+
+//     //     await sendSMS(
+//     //       formattedPhone,
+//     //       ` Payment failed for order #${order._id}. Please try again.`,
+//     //     );
+//     //   }
+//     // }
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Webhook processed",
+//     });
+//   } catch (error) {
+//     console.error("Webhook error:", error);
+//     return res.status(500).json({
+//       success: false,
+//       message: "Webhook processing failed",
+//     });
+//   }
+// };

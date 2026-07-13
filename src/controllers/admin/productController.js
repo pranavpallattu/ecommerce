@@ -84,7 +84,7 @@ function calculateSalePrice(regularPriceRaw, categoryOfferRaw = 0, productOfferR
   const productOffer = Number(productOfferRaw) || 0;
   const applicable = Math.max(categoryOffer, productOffer);
   const salePrice = regularPrice - (regularPrice * applicable) / 100;
-  return Math.round(salePrice * 100) / 100; // round to 2 decimals
+  return Math.round(salePrice * 100) / 100; // Round to 2 decimal places
 }
 
 // ========================= Controller: addProduct =========================

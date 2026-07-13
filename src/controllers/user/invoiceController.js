@@ -1,3 +1,4 @@
+const supabase = require("../../config/supabase");
 const Order = require("../../models/orderSchema");
 const generateInvoice = require("../../services/invoiceService");
 
@@ -15,18 +16,20 @@ if (order.invoice?.number) return;
   // Prevent duplicates
   if (order.invoice?.number) return;
 
-  const { invoiceNumber, invoiceUrl, storagePath } =
-    await generateInvoice(order);
+  // const { invoiceNumber, invoiceUrl, storagePath } =
+  //   await generateInvoice(order);
 
     // console.log(invoiceNumber,  invoiceUrl,   storagePath);
     
 
-  order.invoice = {
-    number: invoiceNumber,
-    url: invoiceUrl,
-    storagePath,
-    generatedAt: new Date(),
-  };
+ const { invoiceNumber, storagePath, generatedAt } =
+  await generateInvoice(order);
+
+order.invoice = {
+  number: invoiceNumber,
+  storagePath,
+  generatedAt,
+};
 
   await order.save();
 };
@@ -34,15 +37,33 @@ if (order.invoice?.number) return;
 
 
 exports.downloadInvoice = async (req, res) => {
-  const { orderId } = req.params;
+  try {
+    const { orderId } = req.params;
 
-  const order = await Order.findById(orderId);
+    const order = await Order.findById(orderId);
 
-  if (!order || !order.invoice?.number) {
-    return res.status(404).json({ message: "Invoice not found" });
+    if (!order || !order.invoice?.storagePath) {
+      return res.status(404).json({
+        message: "Invoice not found",
+      });
+    }
+
+    const { data, error } = await supabase.storage
+      .from("invoices")
+      .createSignedUrl(order.invoice.storagePath, 60 * 10); // 10 minutes
+
+    if (error) {
+      return res.status(400).json({
+        message: error.message,
+      });
+    }
+
+    return res.redirect(data.signedUrl);
+  } catch (err) {
+    console.error(err);
+
+    return res.status(500).json({
+      message: "Failed to download invoice",
+    });
   }
-
-  const filePath = `invoices/${order.invoice.number}.pdf`;
-
-  res.download(filePath);
 };

@@ -8,7 +8,9 @@ const crypto = require("crypto");
 const BuyNow = require("../../models/buynowSchema");
 const { createInvoiceIfNeeded } = require("./invoiceController");
 
-const CANCELLABLE_STATUSES = [
+const ORDER_CANCELLABLE_STATUSES = ["Pending", "Confirmed", "Processing"];
+
+const ITEM_CANCELLABLE_STATUSES = [
   "Pending",
   "Confirmed",
   "Processing",
@@ -185,6 +187,25 @@ exports.placeOrder = async (req, res) => {
     });
 
     await order.save({ session });
+
+    //  increment usedcount of coupon
+
+    if (validCouponId) {
+      await Coupon.findByIdAndUpdate(
+        validCouponId,
+        { $inc: { usedCount: 1 } },
+        { session },
+      );
+
+      //  add coupon in users usedcoupons array
+      if (!user.usedCoupons) {
+        user.usedCoupons = [];
+      }
+
+      user.usedCoupons.push(validCouponId);
+
+      await user.save({ session });
+    }
     await Cart.deleteOne({ userId: user._id }).session(session);
 
     await session.commitTransaction();
@@ -442,7 +463,7 @@ exports.orderCancel = async (req, res) => {
     }
 
     // Check if order-level cancellation is allowed
-    if (!CANCELLABLE_STATUSES.includes(order.orderStatus)) {
+    if (!ORDER_CANCELLABLE_STATUSES.includes(order.orderStatus)) {
       const statusMsg = {
         Shipped: "Order already shipped. Contact support.",
         Delivered: "Order already delivered.",
@@ -450,6 +471,8 @@ exports.orderCancel = async (req, res) => {
         Returned: "Order already returned.",
         ReturnPending: "Return in progress.",
         ReturnRejected: "Return rejected.",
+        PartiallyCancelled: "Order already in partially cancelled state",
+        PartiallyReturnPending: "Some items have return requests in progress.",
       };
 
       const err = new Error(
@@ -460,20 +483,45 @@ exports.orderCancel = async (req, res) => {
       throw err;
     }
 
+    const invalidItem = order.items.find(
+      (item) =>
+        item.itemStatus !== "Cancelled" &&
+        !ORDER_CANCELLABLE_STATUSES.includes(item.itemStatus),
+    );
+
+    if (invalidItem) {
+      throw new Error(
+        `Cannot cancel order because item ${invalidItem._id} is ${invalidItem.itemStatus}`,
+      );
+    }
+
+    const itemsToCancel = order.items.filter((item) =>
+      ORDER_CANCELLABLE_STATUSES.includes(item.itemStatus),
+    );
+
+    if (itemsToCancel.length === 0) {
+      const err = new Error("No cancellable items found in this order.");
+      err.statusCode = 400;
+      throw err;
+    }
+
     // update order
 
     order.orderStatus = "Cancelled";
     order.cancelledAt = new Date();
     order.cancellationReason = reason?.trim() || "User requested cancellation";
-    order.items.forEach((item) => {
+
+    // status change only in non cancelled items
+    itemsToCancel.forEach((item) => {
       item.itemStatus = "Cancelled";
       item.cancelledAt = new Date();
     });
 
     // Restore stock
 
+    // only restore product that were not cancelled
     await Promise.all(
-      order.items.map(async (item) => {
+      itemsToCancel.map(async (item) => {
         const product = await Product.findById(item.productId).session(session);
         if (!product) {
           const err = new Error(`Product not found: ${item.productId}`);
@@ -529,7 +577,7 @@ exports.orderCancel = async (req, res) => {
       refundRecord = {
         refundId: `refund_${crypto.randomUUID()}`,
         amount: refundAmount,
-        reason,
+        reason: order.cancellationReason,
         itemIds: order.items.map((i) => i._id),
         status: "Processed",
       };
@@ -620,7 +668,7 @@ exports.cancelSingleItem = async (req, res) => {
     }
 
     // Check if order-level cancellation is allowed
-    if (!CANCELLABLE_STATUSES.includes(order.orderStatus)) {
+    if (!ITEM_CANCELLABLE_STATUSES.includes(order.orderStatus)) {
       const statusMsg = {
         Shipped: "Order already shipped. Contact support.",
         Delivered: "Order already delivered.",
@@ -628,6 +676,7 @@ exports.cancelSingleItem = async (req, res) => {
         Returned: "Order already returned.",
         ReturnPending: "Return in progress.",
         ReturnRejected: "Return rejected.",
+        PartiallyReturnPending: "Some items have return requests in progress.",
       };
 
       const err = new Error(
@@ -646,9 +695,9 @@ exports.cancelSingleItem = async (req, res) => {
     }
 
     // check if item level cancellation is allowed
-    if (!CANCELLABLE_STATUSES.includes(item.itemStatus)) {
+    if (!ITEM_CANCELLABLE_STATUSES.includes(item.itemStatus)) {
       const err = new Error("Item cannot be cancelled");
-      err.statusCode = 404;
+      err.statusCode = 409;
       throw err;
     }
 
@@ -699,14 +748,12 @@ exports.cancelSingleItem = async (req, res) => {
     if (cancelledCount === totalCount) {
       order.orderStatus = "Cancelled";
 
-      // ✅ Set order-level cancellation reason safely
+      //  Set order-level cancellation reason safely
       order.cancellationReason = "Order cancelled due to item cancellations";
       order.cancelledAt = new Date();
     } else if (cancelledCount > 0) {
       order.orderStatus = "PartiallyCancelled";
     }
-
-    await order.save({ session });
 
     // PRORATE DISCOUNT
     const itemRatio = item.subtotal / originalSubTotal;
@@ -726,38 +773,47 @@ exports.cancelSingleItem = async (req, res) => {
 
     // Refund cod
     if (order.paymentMethod === "cod") {
+      if (order.orderStatus === "Cancelled") {
+        order.paymentStatus = "N/A";
+      } else {
+        order.paymentStatus = "Pending";
+      }
       // COD: No refund needed
       refundRecord = null;
     }
     // Add refund amount to wallet for both wallet and razorpay payment
     else {
-      const walletUpdate = await Wallet.findOneAndUpdate(
-        { userId: user._id },
-        {
-          $inc: { balance: actualRefundAmount },
-          $push: {
-            transactionHistory: {
-              type: "credit",
-              amount: actualRefundAmount,
-              description: `Refund for cancelled item #${item._id}`,
+      if (actualRefundAmount > 0) {
+        const walletUpdate = await Wallet.findOneAndUpdate(
+          { userId: user._id },
+          {
+            $inc: { balance: actualRefundAmount },
+            $push: {
+              transactionHistory: {
+                type: "credit",
+                amount: actualRefundAmount,
+                description: `Refund for cancelled item #${item._id}`,
+              },
             },
           },
-        },
-        { upsert: true, new: true, session },
-      );
+          { upsert: true, new: true, session },
+        );
 
-      if (!walletUpdate) {
-        throw new Error("Failed to update wallet balance");
+        if (!walletUpdate) {
+          const err = new Error("Failed to update wallet balance");
+          err.statusCode = 500;
+          throw err;
+        }
+
+        // Add refund record
+        refundRecord = {
+          refundId: `refund_${crypto.randomUUID()}`,
+          amount: actualRefundAmount,
+          itemIds: [item._id],
+          reason: cancellationReason || "User cancellation",
+          status: "Processed",
+        };
       }
-
-      // Add refund record
-      refundRecord = {
-        refundId: `refund_${crypto.randomUUID()}`,
-        amount: actualRefundAmount,
-        itemIds: [item._id],
-        reason: cancellationReason || "User cancellation",
-        status: "Processed",
-      };
     }
 
     if (refundRecord) {
@@ -775,8 +831,6 @@ exports.cancelSingleItem = async (req, res) => {
       } else if (totalRefunded > 0) {
         order.paymentStatus = "PartiallyRefunded";
       }
-    } else {
-      order.paymentStatus = "N/A";
     }
 
     // 14. Save order
@@ -856,6 +910,22 @@ exports.orderReturn = async (req, res) => {
       });
     }
 
+    const returnStates = [
+      "Returned",
+      "PartiallyReturned",
+      "ReturnPending",
+      "PartiallyReturnPending",
+      "ReturnRejected",
+      "PartiallyReturnRejected",
+    ];
+
+    if (returnStates.includes(order.orderStatus)) {
+      return res.status(409).json({
+        success: false,
+        message: `Order is already in ${order.orderStatus} state`,
+      });
+    }
+
     // check if order status is not delivered
     if (order.orderStatus !== "Delivered") {
       return res.status(400).json({
@@ -864,11 +934,15 @@ exports.orderReturn = async (req, res) => {
       });
     }
 
-    // check is order already in returned or return pending state
-    if (["Returned", "ReturnPending"].includes(order.orderStatus)) {
-      return res.status(400).json({
+    const invalidItem = order.items.find(
+      (item) => item.itemStatus !== "Delivered",
+    );
+
+    if (invalidItem) {
+      return res.status(409).json({
         success: false,
-        message: "Order already returned or return is pending",
+        message:
+          "All items must be delivered before requesting an order return",
       });
     }
 
@@ -882,7 +956,7 @@ exports.orderReturn = async (req, res) => {
 
     await order.save();
 
-    return res.status(201).json({
+    return res.status(200).json({
       success: true,
       message: "Return request submitted successfully",
       data: {
@@ -942,6 +1016,15 @@ exports.itemReturn = async (req, res) => {
         .json({ success: false, message: "Item not found in order" });
     }
 
+       // check is itemstatus is already returned or in return pending state
+    // partiallyreturnpending not included so user can retry return of the same item
+    if (["Returned", "ReturnPending"].includes(item.itemStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: "Item already returned or return is pending",
+      });
+    }
+
     // check is item status not delivered
     if (item.itemStatus !== "Delivered") {
       return res.status(400).json({
@@ -950,23 +1033,27 @@ exports.itemReturn = async (req, res) => {
       });
     }
 
-    // check is itemstatus is already returned or in return pending state
-    if (["Returned", "ReturnPending"].includes(item.itemStatus)) {
-      return res.status(400).json({
-        success: false,
-        message: "Item already returned or return is pending",
-      });
-    }
+ 
 
     // update item status
     item.itemStatus = "ReturnPending";
     item.returnReason = returnReason;
     item.returnRequestedAt = new Date();
 
+    const pendingCount = order.items.filter(
+      (item) => item.itemStatus === "ReturnPending",
+    ).length;
+
+    if (pendingCount === order.items.length) {
+      order.orderStatus = "ReturnPending";
+      order.returnReason ??= "All items requested for return";
+    } else if (pendingCount > 0) {
+      order.orderStatus = "PartiallyReturnPending";
+    }
     // Save order
     await order.save();
 
-    return res.status(201).json({
+    return res.status(200).json({
       success: true,
       message: "Return request submitted successfully",
       data: {

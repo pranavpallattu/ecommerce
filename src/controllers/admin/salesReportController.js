@@ -116,15 +116,16 @@ exports.downloadSalesPDF = async (req, res) => {
     const summaryX = 70;
     doc.fontSize(12).font("Helvetica");
 
-    const summaryData = [
-      ["Total Orders", data.totalOrders],
-      ["Cart Orders", data.cartOrders],
-      ["Buy Now Orders", data.buynowOrders],
-      ["Total Revenue", formatCurrency(data.totalAmount)],
-      ["Total Discount", formatCurrency(data.totalDiscount)],
-      ["Coupon Deduction", formatCurrency(data.couponDeduction)],
-      ["Total Refunded", formatCurrency(data.totalRefunded)],
-    ];
+  const summaryData = [
+  ["Total Orders", data.totalOrders],
+  ["Cart Orders", data.cartOrders],
+  ["Buy Now Orders", data.buynowOrders],
+  ["Total Revenue", formatCurrency(data.totalAmount)],
+  ["Net Revenue", formatCurrency(data.netRevenue)], // Add this
+  ["Total Discount", formatCurrency(data.totalDiscount)],
+  ["Coupon Deduction", formatCurrency(data.couponDeduction)],
+  ["Total Refunded", formatCurrency(data.totalRefunded)],
+];
 
     summaryData.forEach(([label, value]) => {
       doc.text(label, summaryX, doc.y);
@@ -154,19 +155,25 @@ exports.downloadSalesPDF = async (req, res) => {
 
     doc.font("Helvetica").fontSize(11).fillColor("#334155");
 
-    const statusList = [
-      ["Pending", data.pending],
-      ["Confirmed", data.confirmed],
-      ["Processing", data.processing],
-      ["Shipped", data.shipped],
-      ["Delivered", data.delivered],
-      ["Cancelled", data.cancelled],
-      ["Partially Cancelled", data.partiallyCancelled],
-      ["Returned", data.returned],
-      ["Partially Returned", data.partiallyReturned],
-      ["Return Pending", data.returnPending],
-      ["Return Rejected", data.returnRejected],
-    ];
+const statusList = [
+  ["Pending", data.pending],
+  ["Confirmed", data.confirmed],
+  ["Processing", data.processing],
+  ["Shipped", data.shipped],
+  ["Delivered", data.delivered],
+  ["Cancelled", data.cancelled],
+
+  ["Partially Cancelled", data.partiallyCancelled],
+
+  ["Return Pending", data.returnPending],
+  ["Partially Return Pending", data.partiallyReturnPending],
+
+  ["Returned", data.returned],
+  ["Partially Returned", data.partiallyReturned],
+
+  ["Return Rejected", data.returnRejected],
+  ["Partially Return Rejected", data.partiallyReturnRejected],
+];
 
     statusList.forEach(([status, count]) => {
       doc.text(status, 70, doc.y);
@@ -213,32 +220,59 @@ exports.downloadSalesExcel = async (req, res) => {
     sheet.addRow([]);
 
     // ---------- SUMMARY ----------
-    sheet.addRow(["Total Orders", data.totalOrders]);
-    sheet.addRow(["Cart Orders", data.cartOrders]);
-    sheet.addRow(["Buy Now Orders", data.buynowOrders]);
+const row = sheet.addRow(["Total Orders", data.totalOrders]);
+row.getCell(1).font = { bold: true };
+sheet.addRow(["Cart Orders", data.cartOrders]);
+sheet.addRow(["Buy Now Orders", data.buynowOrders]);
 
-    sheet.addRow(["Total Revenue", `₹${data.totalAmount}`]);
-    sheet.addRow(["Total Discount", `₹${data.totalDiscount}`]);
-    sheet.addRow(["Coupon Deduction", `₹${data.couponDeduction}`]);
-    sheet.addRow(["Total Refunded", `₹${data.totalRefunded}`]);
+sheet.addRow([
+  "Total Revenue",
+  `₹${Number(data.totalAmount).toLocaleString("en-IN")}`,
+]);
 
+sheet.addRow([
+  "Net Revenue",
+  `₹${Number(data.netRevenue).toLocaleString("en-IN")}`,
+]);
+
+sheet.addRow([
+  "Total Discount",
+  `₹${Number(data.totalDiscount).toLocaleString("en-IN")}`,
+]);
+
+sheet.addRow([
+  "Coupon Deduction",
+  `₹${Number(data.couponDeduction).toLocaleString("en-IN")}`,
+]);
+
+sheet.addRow([
+  "Total Refunded",
+  `₹${Number(data.totalRefunded).toLocaleString("en-IN")}`,
+]);
     sheet.addRow([]);
 
     // ---------- STATUS TABLE ----------
-    sheet.addRow(["Status", "Count"]).font = { bold: true };
-    const rows = [
-      ["Pending", data.pending],
-      ["Confirmed", data.confirmed],
-      ["Processing", data.processing],
-      ["Shipped", data.shipped],
-      ["Delivered", data.delivered],
-      ["Cancelled", data.cancelled],
-      ["Partially Cancelled", data.partiallyCancelled],
-      ["Returned", data.returned],
-      ["Partially Returned", data.partiallyReturned],
-      ["Return Pending", data.returnPending],
-      ["Return Rejected", data.returnRejected],
-    ];
+    sheet.addRow(["Order Status", "Count"]).font = { bold: true };
+ const rows = [
+  ["Pending", data.pending],
+  ["Confirmed", data.confirmed],
+  ["Processing", data.processing],
+  ["Shipped", data.shipped],
+  ["Delivered", data.delivered],
+  ["Cancelled", data.cancelled],
+
+  ["Partially Cancelled", data.partiallyCancelled],
+
+  ["Return Pending", data.returnPending],
+  ["Partially Return Pending", data.partiallyReturnPending],
+
+  ["Returned", data.returned],
+  ["Partially Returned", data.partiallyReturned],
+
+  ["Return Rejected", data.returnRejected],
+  ["Partially Return Rejected", data.partiallyReturnRejected],
+];
+
     sheet.addRows(rows);
 
     // Auto column width

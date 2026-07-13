@@ -85,6 +85,8 @@ const generateSalesReport = async ({ filterType, startDate, endDate }) => {
     return sum + refundTotal;
   }, 0);
 
+  const netRevenue =  totalAmount - totalRefunded;
+
   const cartOrders = await Order.find({
     checkoutType: "cart",
     createdAt: { $gte: startDate, $lte: endDate },
@@ -118,6 +120,14 @@ const generateSalesReport = async ({ filterType, startDate, endDate }) => {
     (o) => o.orderStatus === "ReturnRejected",
   ).length;
 
+  const partiallyReturnPending = orders.filter(
+    (o) => o.orderStatus === "PartiallyReturnPending",
+  ).length;
+
+  const partiallyReturnRejected = orders.filter(
+    (o) => o.orderStatus === "PartiallyReturnRejected",
+  ).length;
+
   const formatDate = (date) => dayjs(date).format("DD/MM/YYYY hh:mm A");
 
   return {
@@ -136,9 +146,12 @@ const generateSalesReport = async ({ filterType, startDate, endDate }) => {
     cancelled,
     partiallyCancelled,
     returned,
+    partiallyReturnPending,
     partiallyReturned,
     returnPending,
     returnRejected,
+    partiallyReturnRejected,
+    netRevenue,
     filterType,
     startDate: formatDate(startDate),
     endDate: formatDate(endDate),

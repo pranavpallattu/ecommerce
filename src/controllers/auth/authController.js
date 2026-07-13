@@ -208,27 +208,7 @@ exports.verifyAuthOtp = async (req, res) => {
         { expiresIn: "1d" },
       );
 
-      //     const cookieName = role === "admin" ? "admin_token" : "user_token";
 
-      // const cookieOptionsUser = {
-      //   httpOnly: true,
-      //   secure: process.env.NODE_ENV === "production",
-      //   sameSite: "lax",
-      //   path: "/", // user everywhere
-      // };
-
-      // const cookieOptionsAdmin = {
-      //   httpOnly: true,
-      //   secure: process.env.NODE_ENV === "production",
-      //   sameSite: "lax",
-      //   path: "/api/auth/admin", // 🔥 admin only for /api/auth/admin routes
-      // };
-
-      // if (role === "admin") {
-      //   res.cookie("admin_token", token, cookieOptionsAdmin);
-      // } else {
-      //   res.cookie("user_token", token, cookieOptionsUser);
-      // }
 
       res.cookie("auth_token", token, cookieOptions);
 
@@ -261,26 +241,7 @@ exports.verifyAuthOtp = async (req, res) => {
       { expiresIn: "1d" },
     );
 
-    //     const cookieName = role === "admin" ? "admin_token" : "user_token";
 
-    // const cookieOptionsUser = {
-    //   httpOnly: true,
-    //   secure: process.env.NODE_ENV === "production",
-    //   sameSite: "lax",
-    //   path: "/", // user everywhere
-    // };
-
-    // const cookieOptionsAdmin = {
-    //   httpOnly: true,
-    //   secure: process.env.NODE_ENV === "production",
-    //   sameSite: "lax",
-    //   path: "/api/auth/admin", // 🔥 admin only for /api/auth/admin routes
-    // };
-    // if (role === "admin") {
-    //   res.cookie("admin_token", token, cookieOptionsAdmin);
-    // } else {
-    //   res.cookie("user_token", token, cookieOptionsUser);
-    // }
 
     res.cookie("auth_token", token, cookieOptions);
 
@@ -320,18 +281,3 @@ exports.logout = (req, res) => {
     message: "Logged out successfully",
   });
 };
-// controllers/adminAuthController.js
-
-// exports.adminLogout = (req, res) => {
-
-// const cookieOptionsAdmin = {
-//   httpOnly: true,
-//   secure: process.env.NODE_ENV === "production",
-//   sameSite: "lax",
-//   path: "/api/auth/admin", // 🔥 admin only for /api/auth/admin routes
-// };
-
-//   res.clearCookie("admin_token", cookieOptionsAdmin); // ✅ FIXED
-
-//   return res.json({ success: true, message: "Admin logged out" });
-// };

@@ -95,19 +95,34 @@ exports.viewOrder = async (req, res) => {
 
 exports.orderStatus = async (req, res) => {
   const STATUS_TRANSITIONS = {
-    Pending: ["Confirmed", "Cancelled"],
     Confirmed: ["Processing", "Cancelled"],
+
     Processing: ["Shipped", "Cancelled"],
+
     Shipped: ["Delivered"],
-    PartiallyCancelled: ["Processing", "Cancelled"],
-    PartiallyReturned: [],
+
     Delivered: [],
-    Cancelled: [],
+
+    PartiallyCancelled: ["Processing", "Cancelled"],
+
+    ReturnPending: [],
+    PartiallyReturnPending: [],
+
     Returned: [],
+    PartiallyReturned: [],
+
+    ReturnRejected: [],
+    PartiallyReturnRejected: [],
+
+    Cancelled: [],
   };
 
-  const CANCELLABLE_ITEM_STATUSES = ["Pending", "Processing", "Confirmed"];
-
+  const CANCELLABLE_ITEM_STATUSES = [
+    "Pending",
+    "Confirmed",
+    "Processing",
+    "Cancelled",
+  ];
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -159,20 +174,6 @@ exports.orderStatus = async (req, res) => {
       throw err;
     }
 
-    if (status === "Confirmed") {
-      if (order.orderStatus === "Pending") {
-        order.items.forEach((item) => {
-          if (item.itemStatus !== "Pending") {
-            const err = new Error("Only pending orders can be confirmed.");
-            err.statusCode = 400;
-            throw err;
-          }
-          item.itemStatus = status;
-        });
-        order.orderStatus = status;
-      }
-    }
-
     if (status === "Processing") {
       if (
         order.orderStatus !== "Confirmed" &&
@@ -185,17 +186,17 @@ exports.orderStatus = async (req, res) => {
         throw err;
       }
       order.items.forEach((item) => {
-        if (
-          item.itemStatus !== "Confirmed" &&
-          item.itemStatus !== "Cancelled"
-        ) {
+        if (item.itemStatus === "Cancelled") return;
+
+        if (item.itemStatus !== "Confirmed") {
           const err = new Error(
-            "All items must be confirmed before moving the order to processing.",
+            "All active items must be confirmed before moving the order to processing.",
           );
           err.statusCode = 400;
           throw err;
         }
-        item.itemStatus = status;
+
+        item.itemStatus = "Processing";
       });
       order.orderStatus = status;
     }
@@ -209,14 +210,17 @@ exports.orderStatus = async (req, res) => {
         throw err;
       }
       order.items.forEach((item) => {
+        if (item.itemStatus === "Cancelled") return;
+
         if (item.itemStatus !== "Processing") {
           const err = new Error(
-            "All items must be processing before marking the order as shipped.",
+            "All active items must be processing before marking the order as shipped.",
           );
           err.statusCode = 400;
           throw err;
         }
-        item.itemStatus = status;
+
+        item.itemStatus = "Shipped";
       });
       order.orderStatus = status;
     }
@@ -229,18 +233,23 @@ exports.orderStatus = async (req, res) => {
         err.statusCode = 400;
         throw err;
       }
+
       order.items.forEach((item) => {
+        if (item.itemStatus === "Cancelled") return;
+
         if (item.itemStatus !== "Shipped") {
           const err = new Error(
-            "All items must be shipped before marking the order as delivered.",
+            "All active items must be shipped before marking the order as delivered.",
           );
           err.statusCode = 400;
           throw err;
         }
-        item.itemStatus = status;
+
+        item.itemStatus = "Delivered";
         item.deliveredAt = new Date();
       });
-      order.orderStatus = status;
+
+      order.orderStatus = "Delivered";
       order.paymentStatus = "Paid";
       order.deliveredAt = new Date();
     }
@@ -257,17 +266,19 @@ exports.orderStatus = async (req, res) => {
       }
 
       for (const item of order.items) {
+        if (item.itemStatus === "Cancelled") continue;
+
         const product = await Product.findById(item.productId).session(session);
-        if (!product) {
-          const err = new Error(
-            `Product not found for item ${item.productId}. Cannot cancel.`,
-          );
-          err.statusCode = 400;
-          throw err;
-        }
+
+if (!product) {
+  const err = new Error(`Product ${item.productId} not found`);
+  err.statusCode = 404;
+  throw err;
+}
 
         product.quantity += item.quantity;
         await product.save({ session });
+
         item.itemStatus = "Cancelled";
         item.cancelledAt = new Date();
       }
@@ -380,7 +391,7 @@ exports.orderStatus = async (req, res) => {
     console.error("Error updating order status", error);
     return res.status(status).json({ success: false, message: error.message });
   } finally {
-    session.endSession();
+    await session.endSession();
   }
 };
 
@@ -468,6 +479,12 @@ exports.orderReturnApprove = async (req, res) => {
     let refundRecord = null;
 
     refundAmount = Math.min(maxRefundableAmount, order.grandTotal);
+
+    if (refundAmount <= 0) {
+      const err = new Error("No refundable amount available");
+      err.statusCode = 400;
+      throw err;
+    }
 
     const walletUpdate = await Wallet.findOneAndUpdate(
       {
@@ -585,6 +602,17 @@ exports.orderReturnReject = async (req, res) => {
     }
 
     order.orderStatus = "ReturnRejected";
+
+    const invalidItem = order.items.find(
+      (item) => item.itemStatus !== "ReturnPending",
+    );
+
+    if (invalidItem) {
+      return res.status(400).json({
+        success: false,
+        message: `Item ${invalidItem._id} is not in ReturnPending state.`,
+      });
+    }
     for (const item of order.items) {
       item.itemStatus = "ReturnRejected";
     }
@@ -646,7 +674,7 @@ exports.itemReturnReject = async (req, res) => {
       });
     }
 
-    // find the specific orer
+    // find the specific order
     const item = order.items.id(itemId);
     if (!item) {
       await session.abortTransaction();
@@ -680,11 +708,35 @@ exports.itemReturnReject = async (req, res) => {
     // update item status
 
     item.itemStatus = "ReturnRejected";
-    item.returnApprovedAt = new Date();
+
+    const pendingCount = order.items.filter(
+      (i) => i.itemStatus === "ReturnPending",
+    ).length;
+
+    const rejectedCount = order.items.filter(
+      (i) => i.itemStatus === "ReturnRejected",
+    ).length;
+
+    const returnedCount = order.items.filter(
+      (i) => i.itemStatus === "Returned",
+    ).length;
+
+    if (pendingCount > 0) {
+      order.orderStatus =
+        pendingCount === order.items.length
+          ? "ReturnPending"
+          : "PartiallyReturnPending";
+    } else if (returnedCount > 0) {
+      order.orderStatus =
+        returnedCount === order.items.length ? "Returned" : "PartiallyReturned";
+    } else if (rejectedCount > 0) {
+      order.orderStatus =
+        rejectedCount === order.items.length
+          ? "ReturnRejected"
+          : "PartiallyReturnRejected";
+    }
 
     await order.save({ session });
-    await session.commitTransaction();
-
     await session.commitTransaction();
 
     try {
@@ -791,22 +843,43 @@ exports.itemReturnApprove = async (req, res) => {
     let actualRefundAmount = 0;
     let refundRecord = null;
 
-    const returnedCount = order.items.filter(
-      (item) => item.itemStatus === "Returned",
-    ).length;
     const totalCount = order.items.length;
 
-    if (returnedCount === totalCount) {
+    const pendingCount = order.items.filter(
+      (i) => i.itemStatus === "ReturnPending",
+    ).length;
+
+    const returnedCount = order.items.filter(
+      (i) => i.itemStatus === "Returned",
+    ).length;
+
+    const rejectedCount = order.items.filter(
+      (i) => i.itemStatus === "ReturnRejected",
+    ).length;
+
+    if (pendingCount > 0) {
+      order.orderStatus =
+        pendingCount === totalCount
+          ? "ReturnPending"
+          : "PartiallyReturnPending";
+    } else if (returnedCount === totalCount) {
       order.orderStatus = "Returned";
       order.returnedAt = new Date();
 
       if (!order.returnReason) {
         order.returnReason = "All items returned and approved";
       }
-    } else {
+    } else if (rejectedCount === totalCount) {
+      order.orderStatus = "ReturnRejected";
+    } else if (returnedCount > 0 && rejectedCount > 0) {
+      order.orderStatus = "PartiallyReturnRejected";
+    } else if (returnedCount > 0) {
       order.orderStatus = "PartiallyReturned";
+    } else if (rejectedCount > 0) {
+      order.orderStatus = "PartiallyReturnRejected";
+    } else {
+      order.orderStatus = "Delivered";
     }
-
     // await order.save({ session });
 
     // Calculate max refundable
@@ -858,8 +931,9 @@ exports.itemReturnApprove = async (req, res) => {
 
     // push refundRecord
 
-    order.refunds.push(refundRecord);
-
+    if (refundRecord) {
+      order.refunds.push(refundRecord);
+    }
     const totalRefunded = order.refunds
       .filter((r) => r.status === "Processed")
       .reduce((sum, r) => sum + r.amount, 0);
@@ -929,13 +1003,13 @@ exports.getReturnPendingRequests = async (req, res) => {
     const itemReturns = [];
 
     for (const order of orders) {
-      // ✅ CASE 1: FULL ORDER RETURN
+      //  CASE 1: FULL ORDER RETURN
       if (order.orderStatus === "ReturnPending") {
         orderReturns.push(order);
-        continue; // ⛔ Skip item-level returns for this order
+        continue; //  Skip item-level returns for this order
       }
 
-      // ✅ CASE 2: ITEM-LEVEL RETURNS ONLY
+      //  CASE 2: ITEM-LEVEL RETURNS ONLY
       order.items.forEach((item) => {
         if (item.itemStatus === "ReturnPending") {
           itemReturns.push({

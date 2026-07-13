@@ -107,22 +107,22 @@ exports.applyCoupon = async (req, res) => {
       // cart.finalTotal = cart.subTotal - discountAmount;
       await cart.save({ session });
 
-      // update coupon
-      await Coupon.findByIdAndUpdate(
-        coupon._id,
-        { $inc: { usedCount: 1 } },
-        { session }
-      );
+      // // update coupon
+      // await Coupon.findByIdAndUpdate(
+      //   coupon._id,
+      //   { $inc: { usedCount: 1 } },
+      //   { session }
+      // );
 
       // update user
 
-      if (!user.usedCoupons) {
-        user.usedCoupons = [];
-      }
-      user.usedCoupons.push(coupon._id);
-      await user.save({ session });
+      // if (!user.usedCoupons) {
+      //   user.usedCoupons = [];
+      // }
+      // user.usedCoupons.push(coupon._id);
+      // await user.save({ session });
 
-      // commit transaction
+      // // commit transaction
 
       await session.commitTransaction();
     } catch (error) {
@@ -169,52 +169,52 @@ exports.removeCoupon = async (req, res) => {
       });
     }
 
-    const appliedCouponId = cart.appliedCoupon;
+    // const appliedCouponId = cart.appliedCoupon;
 
-    // Find the coupon to decrement usage
-    const coupon = await Coupon.findById(appliedCouponId);
-    if (!coupon) {
-      // Coupon was deleted, just remove from cart
-      cart.appliedCoupon = null;
-      cart.discount = 0;
-      cart.finalTotal = cart.subTotal;
-      await cart.save();
+    // // Find the coupon to decrement usage
+    // const coupon = await Coupon.findById(appliedCouponId);
+    // if (!coupon) {
+    //   // Coupon was deleted, just remove from cart
+    //   cart.appliedCoupon = null;
+    //   cart.discount = 0;
+    //   cart.finalTotal = cart.subTotal;
+    //   await cart.save();
 
-      return res.status(200).json({
-        success: true,
-        message: "Coupon removed successfully",
-        data: cart,
-      });
-    }
+    //   return res.status(200).json({
+    //     success: true,
+    //     message: "Coupon removed successfully",
+    //     data: cart,
+    //   });
+    // }
 
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
       // update cart
-      const appliedCouponId = cart.appliedCoupon;
+      // const appliedCouponId = cart.appliedCoupon;
       cart.appliedCoupon = null;
       cart.discount = 0;
       cart.finalTotal = cart.subTotal;
 
       await cart.save({ session });
 
-      // update coupon usage count (-1) and prevent negative
+      // // update coupon usage count (-1) and prevent negative
 
-      coupon.usedCount = Math.max(0, coupon.usedCount - 1);
-      await coupon.save({ session });
+      // coupon.usedCount = Math.max(0, coupon.usedCount - 1);
+      // await coupon.save({ session });
 
-      // update user used coupons
-      if (user.usedCoupons && user.usedCoupons.length > 0) {
-        const index = user.usedCoupons.findIndex(
-          (couponId) => couponId.toString() !== appliedCouponId.toString()
-        );
-        //  find index returns -1 if not match is found , if it is -1 it removes the last element of array splice(-1,1)
-        if (index !== -1) {
-          user.usedCoupons.splice(index, 1);
-        }
-        await user.save({ session });
-      }
+      // // update user used coupons
+      // if (user.usedCoupons && user.usedCoupons.length > 0) {
+      //   const index = user.usedCoupons.findIndex(
+      //     (couponId) => couponId.toString() === appliedCouponId.toString()
+      //   );
+      //   //  find index returns -1 if not match is found , if it is -1 it removes the last element of array splice(-1,1)
+      //   if (index !== -1) {
+      //     user.usedCoupons.splice(index, 1);
+      //   }
+      //   await user.save({ session });
+      // }
 
       // commit transaction
 
