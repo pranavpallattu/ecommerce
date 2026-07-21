@@ -21,7 +21,7 @@ const wishlistSchema = new mongoose.Schema(
       },
     ],
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const Wishlist = mongoose.model("Wishlist", wishlistSchema);

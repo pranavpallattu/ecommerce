@@ -21,7 +21,9 @@ function validateCategoryData(req) {
     throw error;
   };
 
-  // 1. Required fields
+  // ===========================
+  // Required Fields
+  // ===========================
   if (!name?.trim()) {
     throwValidationError("Category name is required");
   }
@@ -30,38 +32,64 @@ function validateCategoryData(req) {
     throwValidationError("Category description is required");
   }
 
-  // 2. Name validation
-  const namePattern = /^[A-Za-z\s]+$/;
-  if (!namePattern.test(name.trim())) {
-    throwValidationError("Category name can only contain letters and spaces");
+  const trimmedName = name.trim();
+  const trimmedDescription = description.trim();
+
+  // ===========================
+  // Category Name Validation
+  // ===========================
+  const namePattern = /^[A-Za-z]+(?:\s[A-Za-z]+)*$/;
+
+  if (!namePattern.test(trimmedName)) {
+    throwValidationError(
+      "Category name can only contain letters and single spaces between words",
+    );
   }
 
-  if (name.trim().length < 3) {
+  if (trimmedName.length < 3) {
     throwValidationError("Category name must be at least 3 characters long");
   }
 
-  // 3. Description length
-  if (description.trim().length < 10) {
+  if (trimmedName.length > 50) {
+    throwValidationError("Category name cannot exceed 50 characters");
+  }
+
+  // ===========================
+  // Description Validation
+  // ===========================
+  if (trimmedDescription.length < 10) {
     throwValidationError("Description must be at least 10 characters long");
   }
 
-  // 4. Offer validation
-  let cleanedOffer = null;
+  if (trimmedDescription.length > 200) {
+    throwValidationError("Description cannot exceed 200 characters");
+  }
+
+  // ===========================
+  // Offer Validation
+  // ===========================
+  let cleanedOffer = 0;
+
   if (offer !== undefined && offer !== null && offer !== "") {
-    const offerNum = Number(offer);
-    if (isNaN(offerNum) || offerNum < 0 || offerNum > 100) {
-      throwValidationError("Offer must be a number between 0 and 100");
+    const offerNumber = Number(offer);
+
+    if (!Number.isFinite(offerNumber)) {
+      throwValidationError("Offer must be a valid number");
     }
-    cleanedOffer = offerNum;
+
+    if (offerNumber < 0 || offerNumber > 100) {
+      throwValidationError("Offer must be between 0 and 100");
+    }
+
+    cleanedOffer = offerNumber;
   }
 
   return {
-    name: name.trim(),
-    description: description.trim(),
+    name: trimmedName,
+    description: trimmedDescription,
     offer: cleanedOffer,
   };
 }
-
 
 function validateProductData(req, mode = "add") {
   let pattern = /^[a-z0-9\s\-()]+$/i;
@@ -77,12 +105,10 @@ function validateProductData(req, mode = "add") {
   } = req.body;
 
   // console.log(req.body);
-  
 
   const files = req?.files;
 
   console.log(files);
-  
 
   // productName
   if (
@@ -105,8 +131,8 @@ function validateProductData(req, mode = "add") {
     }
   }
 
-  if (!description || description.length < 5 || description.length > 200) {
-    throw new Error("description should be between 5 to 200 characters");
+  if (!description || description.length < 10 || description.length > 500) {
+    throw new Error("description should be between 10 to 500 characters");
   }
 
   if (!category) {
@@ -130,7 +156,6 @@ function validateProductData(req, mode = "add") {
   }
 
   console.log("validation passed");
-  
 }
 
 function validateEditProductData(req) {
@@ -157,13 +182,13 @@ function validateEditProductData(req) {
     !pattern.test(productName)
   ) {
     throw new Error(
-      "Product name must be 3–50 characters long and contain only letters, numbers, spaces, -, or ()."
+      "Product name must be 3–50 characters long and contain only letters, numbers, spaces, -, or ().",
     );
   }
 
   // 2️⃣ Description
-  if (!description || description.length < 5 || description.length > 200) {
-    throw new Error("Description should be between 5 and 200 characters.");
+  if (!description || description.length < 10 || description.length > 500) {
+    throw new Error("Description should be between 10 and 500 characters.");
   }
 
   // 3️⃣ Quantity
@@ -185,7 +210,6 @@ function validateEditProductData(req) {
   if (offer != null && (offer < 0 || offer > 100)) {
     throw new Error("Offer should be between 0 and 100.");
   }
-
 }
 
 function validateCouponData(couponData) {
@@ -276,7 +300,7 @@ function validateCouponData(couponData) {
   }
 }
 
-function validateEditCouponData(editCouponData,existingCoupon) {
+function validateEditCouponData(editCouponData, existingCoupon) {
   const {
     code,
     description,
@@ -286,7 +310,6 @@ function validateEditCouponData(editCouponData,existingCoupon) {
     usageLimit,
     perUserLimit,
   } = editCouponData;
-
 
   if (code !== undefined) {
     if (!code || typeof code !== "string" || code.trim().length === 0) {
@@ -308,7 +331,6 @@ function validateEditCouponData(editCouponData,existingCoupon) {
     }
   }
 
-
   if (expiryDate !== undefined) {
     if (!expiryDate) {
       throw new Error("Expiry date cannot be empty");
@@ -328,15 +350,12 @@ function validateEditCouponData(editCouponData,existingCoupon) {
     if (discount === null || typeof discount !== "number" || isNaN(discount)) {
       throw new Error("Discount must be a valid number");
     }
-     
-    if(!existingCoupon || !existingCoupon.discountType){
+
+    if (!existingCoupon || !existingCoupon.discountType) {
       throw new Error("Cannot validate discount without existing coupon data");
     }
-    const typeToValidate=existingCoupon.discountType
-      if (
-      typeToValidate === "percentage" &&
-      (discount <= 0 || discount > 100)
-    ) {
+    const typeToValidate = existingCoupon.discountType;
+    if (typeToValidate === "percentage" && (discount <= 0 || discount > 100)) {
       throw new Error("Discount percentage must be a number between 0 and 100");
     } else if (typeToValidate === "flat" && discount <= 0) {
       throw new Error("Discount amount must be a valid positive number");
@@ -390,7 +409,7 @@ function ValidateAddressData(addressData) {
     pincode,
     country,
     landmark,
-    isDefault
+    isDefault,
   } = addressData;
 
   // Validate name
@@ -426,7 +445,7 @@ function ValidateAddressData(addressData) {
     // Indian phone number validation (10 digits, starting with 6-9)
     if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
       throw new Error(
-        "Phone number must be a valid 10-digit Indian mobile number"
+        "Phone number must be a valid 10-digit Indian mobile number",
       );
     }
   }
@@ -497,7 +516,7 @@ function ValidateAddressData(addressData) {
     }
   }
 
-   if (isDefault !== undefined) {
+  if (isDefault !== undefined) {
     // Convert string to boolean if needed
     if (typeof isDefault === "string") {
       if (isDefault !== "true" && isDefault !== "false") {
@@ -527,7 +546,7 @@ function validateEditAddressData(editAddressData) {
     postalCode,
     country,
     landmark,
-    isDefault
+    isDefault,
   } = editAddressData;
 
   // Validate name ✅ (Already correct)
@@ -579,7 +598,7 @@ function validateEditAddressData(editAddressData) {
     // Indian phone number validation (10 digits, starting with 6-9)
     if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
       throw new Error(
-        "Phone number must be a valid 10-digit Indian mobile number"
+        "Phone number must be a valid 10-digit Indian mobile number",
       );
     }
   }
@@ -683,7 +702,7 @@ function validateEditAddressData(editAddressData) {
     }
   }
 
-   if (isDefault !== undefined) {
+  if (isDefault !== undefined) {
     // Convert string to boolean if needed
     if (typeof isDefault === "string") {
       if (isDefault !== "true" && isDefault !== "false") {

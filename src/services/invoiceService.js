@@ -1,4 +1,3 @@
-// src/utils/generateInvoice.js
 const PDFDocument = require("pdfkit");
 const { PassThrough } = require("stream");
 const supabase = require("../config/supabase");
@@ -51,7 +50,7 @@ function textCenter(doc, txt, x, y, width) {
   doc.text(txt, x, y, { width, align: "center" });
 }
 
-// ====================== PDF BUFFER GENERATOR ======================
+//  PDF BUFFER GENERATOR 
 async function generatePdfBuffer(order, invoiceNumber) {
   const orderDate = new Date(order.createdAt || Date.now());
   const dateStr = orderDate.toLocaleDateString("en-IN", {
@@ -76,7 +75,7 @@ async function generatePdfBuffer(order, invoiceNumber) {
   doc.pipe(stream);
   stream.on("data", (c) => chunks.push(c));
 
-  // ── 1. HEADER ───────────────────────────────────────────────────────────────
+  //  HEADER 
   const HEADER_H = 90;
   doc.rect(0, 0, PAGE_W, HEADER_H).fill(COLORS.navy);
 
@@ -101,7 +100,7 @@ async function generatePdfBuffer(order, invoiceNumber) {
 
   let y = HEADER_H + 18;
 
-  // ── 2. META ROW ─────────────────────────────────────────────────────────────
+  // META ROW 
   doc.rect(MARGIN, y, CONTENT_W, 34).fill(COLORS.offWhite);
 
   const metaItems = [
@@ -128,7 +127,7 @@ async function generatePdfBuffer(order, invoiceNumber) {
 
   y += 50;
 
-  // ── 3. BILL TO + PAYMENT INFO ────────────────────────────────────────────────
+  // BILL TO + PAYMENT INFO 
   const BOX_H = 110;
   const HALF = (CONTENT_W - 12) / 2;
 
@@ -198,7 +197,7 @@ async function generatePdfBuffer(order, invoiceNumber) {
 
   y += BOX_H + 22;
 
-  // ── 4. ITEMS TABLE ──────────────────────────────────────────────────────────
+  // ITEMS TABLE 
   const COLS = {
     no: { label: "#", x: MARGIN, w: 25, align: "center" },
     desc: { label: "Item Description", x: MARGIN + 25, w: 230, align: "left" },
@@ -258,9 +257,9 @@ async function generatePdfBuffer(order, invoiceNumber) {
   });
 
   hRule(doc, ry + 1, COLORS.sky, 1.5);
-  y = ry + 28; // Good spacing after table
+  y = ry + 28; 
 
-  // ── 5. TOTALS SECTION ───────────────────────────────────────────────────────
+  //TOTALS SECTION 
   const TOTAL_LBL_X = MARGIN + 290;
   const TOTAL_VAL_X = MARGIN + 390;
   const TOTAL_VAL_W = 115;
@@ -295,7 +294,7 @@ async function generatePdfBuffer(order, invoiceNumber) {
   hRule(doc, y + 3, "#cbd5e1", 0.8);
   y += 14;
 
-  // ====================== GRAND TOTAL BOX (Fixed) ======================
+  //  GRAND TOTAL BOX 
   const boxWidth = CONTENT_W - (TOTAL_LBL_X - MARGIN) + 15;
   doc.rect(TOTAL_LBL_X - 12, y - 8, boxWidth, 38).fill(COLORS.navy);
 
@@ -311,7 +310,7 @@ async function generatePdfBuffer(order, invoiceNumber) {
 
   y += 55;
 
-  // ── 6. FOOTER ───────────────────────────────────────────────────────────────
+  // FOOTER 
   const FOOTER_Y = PAGE_H - 70;
   hRule(doc, FOOTER_Y, COLORS.sky, 1);
 
@@ -355,7 +354,7 @@ async function generatePdfBuffer(order, invoiceNumber) {
   return Buffer.concat(chunks);
 }
 
-// ====================== MAIN FUNCTION ======================
+// MAIN FUNCTION 
 module.exports = async function generateInvoice(order) {
   const invoiceNumber = `${INVOICE_PREFIX}-${Date.now()}`;
   const storagePath = `orders/${order._id}/${invoiceNumber}.pdf`;
@@ -378,7 +377,6 @@ module.exports = async function generateInvoice(order) {
   return {
     invoiceNumber,
     storagePath,
-    // invoiceUrl: urlData.signedUrl,
     generatedAt: new Date(),
   };
 };

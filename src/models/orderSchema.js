@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 
-const transactionStatuses = [
+const FULFILLMENT_STATUSES = [
   "Pending",
   "Confirmed",
   "Processing",
@@ -13,10 +13,10 @@ const transactionStatuses = [
   "ReturnPending",
   "PartiallyReturnPending",
   "ReturnRejected",
-  "PartiallyReturnRejected", 
+  "PartiallyReturnRejected",
 ];
 
-const paymentStatuses = [
+const PAYMENT_STATUSES = [
   "Pending",
   "Paid",
   "Failed",
@@ -24,6 +24,11 @@ const paymentStatuses = [
   "PartiallyRefunded",
   "N/A",
 ];
+
+const REFUND_STATUSES = ["Initiated", "Processed", "Failed"];
+
+const PAYMENT_METHODS = ["cod", "razorpay", "wallet"];
+const CHECKOUT_TYPES = ["cart", "buyNow"];
 
 const orderSchema = new mongoose.Schema(
   {
@@ -48,7 +53,7 @@ const orderSchema = new mongoose.Schema(
 
         itemStatus: {
           type: String,
-          enum: transactionStatuses,
+          enum: FULFILLMENT_STATUSES,
           default: "Pending",
         },
 
@@ -84,7 +89,7 @@ const orderSchema = new mongoose.Schema(
 
     checkoutType: {
       type: String,
-      enum: ["cart", "buyNow"],
+      enum: CHECKOUT_TYPES,
       required: true,
     },
 
@@ -101,7 +106,7 @@ const orderSchema = new mongoose.Schema(
 
     paymentMethod: {
       type: String,
-      enum: ["cod", "razorpay", "wallet"],
+      enum: PAYMENT_METHODS,
       required: true,
     },
 
@@ -110,19 +115,15 @@ const orderSchema = new mongoose.Schema(
 
     paymentStatus: {
       type: String,
-      enum: paymentStatuses,
+      enum: PAYMENT_STATUSES,
       default: "Pending",
     },
-
-    paymentCapturedAt: { type: Date, default: null },
-    paymentFailedAt: { type: Date, default: null },
-    failureReason: { type: String, default: null },
 
     walletAmountUsed: { type: Number, default: 0, min: 0 },
 
     orderStatus: {
       type: String,
-      enum: transactionStatuses,
+      enum: FULFILLMENT_STATUSES,
       default: "Pending",
     },
 
@@ -135,37 +136,29 @@ const orderSchema = new mongoose.Schema(
         date: { type: Date, default: Date.now },
         status: {
           type: String,
-          enum: ["Initiated", "Processed", "Failed"],
+          enum: REFUND_STATUSES,
           default: "Initiated",
         },
       },
     ],
 
-    webhookEvents: [
-      {
-        eventId: { type: String, required: true },
-        eventType: { type: String, required: true },
-        receivedAt: { type: Date, default: Date.now },
+    invoice: {
+      number: {
+        type: String,
+        unique: true,
+        sparse: true,
       },
-    ],
 
-   invoice: {
-  number: {
-    type: String,
-    unique: true,
-    sparse: true,
-  },
+      storagePath: {
+        type: String,
+        default: null,
+      },
 
-  storagePath: {
-    type: String,
-    default: null,
-  },
-
-  generatedAt: {
-    type: Date,
-    default: null,
-  },
-},
+      generatedAt: {
+        type: Date,
+        default: null,
+      },
+    },
 
     deliveredAt: { type: Date, default: null },
     cancelledAt: { type: Date, default: null },
@@ -173,7 +166,7 @@ const orderSchema = new mongoose.Schema(
     cancellationReason: { type: String, default: null },
     returnReason: { type: String, default: null },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 orderSchema.pre("save", function (next) {
@@ -195,7 +188,6 @@ orderSchema.index({ paymentStatus: 1 });
 orderSchema.index({ razorpayOrderId: 1 });
 orderSchema.index({ razorpayPaymentId: 1 });
 orderSchema.index({ "refunds.refundId": 1 });
-orderSchema.index({ "webhookEvents.eventId": 1 });
 
 const Order = mongoose.model("Order", orderSchema);
 module.exports = Order;

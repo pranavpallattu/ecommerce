@@ -8,8 +8,7 @@ passport.use(
     {
       clientID: process.env.GOOGLE_CLIENT_ID, // from Google Cloud Console
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL:
-        "https://ecommerce-8tjk.onrender.com/api/auth/google/callback",
+       callbackURL: `${process.env.BACKEND_URL}/api/auth/google/callback`,
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
@@ -28,7 +27,7 @@ passport.use(
           });
           await user.save();
         } else {
-          // 🚨 NEVER override admin accidentally
+          //  NEVER override admin accidentally
           if (!user.googleId) {
             user.googleId = profile.id;
           }

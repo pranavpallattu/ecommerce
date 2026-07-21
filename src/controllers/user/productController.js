@@ -16,11 +16,11 @@ exports.getHomeProductsController = async (req, res) => {
         })
           .sort({ createdAt: -1 })
           .select(
-            "_id productName productImage salePrice regularPrice quantity"
+            "_id productName productImage salePrice regularPrice quantity",
           )
           .limit(3);
 
-          if(products.length === 0) return null;
+        if (products.length === 0) return null;
 
         return {
           categoryName: categoryItem.name,
@@ -28,11 +28,10 @@ exports.getHomeProductsController = async (req, res) => {
           categoryOffer: categoryItem.offer || 0,
           products,
         };
-      })
+      }),
     );
 
-
-    const filteredCategories = categoryProducts.filter(Boolean);  
+    const filteredCategories = categoryProducts.filter(Boolean);
 
     res.status(200).json({
       success: true,
@@ -44,12 +43,10 @@ exports.getHomeProductsController = async (req, res) => {
   }
 };
 
-
-
 exports.getShopProductsController = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const limit = parseInt(req.query.limit) || 12;
     const skip = (page - 1) * limit;
 
     const category = req.query.category || "all";
@@ -97,7 +94,7 @@ exports.getShopProductsController = async (req, res) => {
 
     const totalProducts = await Product.countDocuments(filters);
     const totalPages = Math.ceil(totalProducts / limit);
-
+    const hasMore = page < totalPages;
     const products = await Product.find(filters)
       .populate("category", "name offer")
       .sort(sortQuery)
@@ -117,6 +114,7 @@ exports.getShopProductsController = async (req, res) => {
           totalProducts,
           totalPages,
           currentPage: page,
+          hasMore,
         },
         categories,
         appliedFilters: {
@@ -131,29 +129,37 @@ exports.getShopProductsController = async (req, res) => {
   }
 };
 
+exports.getProductDetailsController = async (req, res) => {
+  try {
+    const { id } = req.params;
 
-exports.getProductDetailsController=async(req,res)=>{
-  try{
-
-    const {id} = req.params
-
-    if(!mongoose.Types.ObjectId.isValid(id)){
-      return res.status(400).json({success:false,message:"Invalid product id"})
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid product id" });
     }
 
-    const product=await Product.findById(id).populate("category", "name")
-    if(!product){
-      return res.status(404).json({success:false,message:"product does not exist"})
+    const product = await Product.findById(id).populate("category", "name");
+    if (!product) {
+      return res
+        .status(404)
+        .json({ success: false, message: "product does not exist" });
     }
 
-    const relatedProducts=await Product.find({category:product.category, _id : {$ne : product._id},isActive:true,deletedAt:null}).populate("category", "name").limit(8)
-    return res.status(200).json({success:true,message:"product details and related products retrieved successfully",data:{product,relatedProducts}})
+    const relatedProducts = await Product.find({
+      category: product.category,
+      _id: { $ne: product._id },
+      isActive: true,
+      deletedAt: null,
+    })
+      .populate("category", "name")
+      .limit(8);
+    return res.status(200).json({
+      success: true,
+      message: "product details and related products retrieved successfully",
+      data: { product, relatedProducts },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
   }
-  catch (error) {
-   return res.status(500).json({ success: false, message: error.message });
-  }
-}
-
-
-
-
+};

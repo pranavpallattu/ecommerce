@@ -6,13 +6,15 @@ const categorySchema = new mongoose.Schema(
       type: String,
       required: true,
       unique: true,
-      trim:true,
-      lowercase:true
+      trim: true,
+      lowercase: true,
     },
     description: {
       type: String,
-      required: false,
-      trim:true
+      required: true,
+      trim: true,
+      minlength: 10,
+      maxlength: 200,
     },
     isActive: {
       type: Boolean,
@@ -24,14 +26,14 @@ const categorySchema = new mongoose.Schema(
     },
     offer: {
       type: Number,
-      default: null,
-      min:0,
-      max:100
-    }
+      default: 0,
+      min: 0,
+      max: 100,
+    },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 const Category = mongoose.model("Category", categorySchema);

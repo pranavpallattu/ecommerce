@@ -7,6 +7,7 @@ const Coupon = require("../../models/couponSchema");
 const crypto = require("crypto");
 const BuyNow = require("../../models/buynowSchema");
 const { createInvoiceIfNeeded } = require("./invoiceController");
+const getOrderDateRange = require("../../utils/getOrderDateRange");
 
 const ORDER_CANCELLABLE_STATUSES = ["Pending", "Confirmed", "Processing"];
 
@@ -16,6 +17,20 @@ const ITEM_CANCELLABLE_STATUSES = [
   "Processing",
   "PartiallyCancelled",
 ];
+
+const ORDER_STATUS_GROUPS = {
+  "On the way": ["Confirmed", "Processing", "Shipped"],
+  Delivered: ["Delivered"],
+  Cancelled: ["Cancelled", "PartiallyCancelled"],
+  Returned: [
+    "Returned",
+    "PartiallyReturned",
+    "ReturnPending",
+    "PartiallyReturnPending",
+    "ReturnRejected",
+    "PartiallyReturnRejected",
+  ],
+};
 
 exports.placeOrder = async (req, res) => {
   const session = await mongoose.startSession();
@@ -27,24 +42,33 @@ exports.placeOrder = async (req, res) => {
 
     // validate payment method
     if (!["cod", "wallet"].includes(paymentMethod)) {
-      const err = new Error("Invalid payment method");
-      err.statusCode = 400;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        success: false,
+        message: "Invalid payment method",
+      });
     }
 
     // validate address
     if (!address?.addressId || !address?.snapshot) {
-      const err = new Error("Address is required");
-      err.statusCode = 422;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        success: false,
+        message: "Address is required",
+      });
     }
 
     // validate cart
     const cart = await Cart.findOne({ userId: user._id }).session(session);
     if (!cart || cart.items.length === 0) {
-      const err = new Error("Cart is empty");
-      err.statusCode = 409;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        success: false,
+        message: "Cart is empty",
+      });
     }
 
     const subTotal = cart.items.reduce(
@@ -59,39 +83,52 @@ exports.placeOrder = async (req, res) => {
       const coupon = await Coupon.findById(couponId).session(session);
 
       if (!coupon) {
-        const err = new Error("Invalid coupon");
-        err.statusCode = 400;
-        throw err;
+        await session.abortTransaction();
+
+        return res.status(400).json({
+          success: false,
+          message: "Invalid coupon",
+        });
       }
 
       // Check if coupon is active
       if (!coupon.isActive) {
-        const err = new Error("Coupon is not active");
-        err.statusCode = 400;
-        throw err;
+        await session.abortTransaction();
+
+        return res.status(400).json({
+          success: false,
+          message: "Coupon is not active",
+        });
       }
 
       // Check expiry
       if (coupon.expiryDate && new Date(coupon.expiryDate) < new Date()) {
-        const err = new Error("Coupon has expired");
-        err.statusCode = 400;
-        throw err;
+        await session.abortTransaction();
+
+        return res.status(400).json({
+          success: false,
+          message: "Coupon has expired ",
+        });
       }
 
       // Check minimum purchase
       if (subTotal < coupon.minPurchase) {
-        const err = new Error(
-          `Minimum purchase of ₹${coupon.minPurchase} required to use this coupon`,
-        );
-        err.statusCode = 400;
-        throw err;
+        await session.abortTransaction();
+
+        return res.status(400).json({
+          success: false,
+          message: `Minimum purchase of ₹${coupon.minPurchase} required to use this coupon`,
+        });
       }
 
       // Check usage limit (if applicable)
       if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
-        const err = new Error("Coupon usage limit exceeded");
-        err.statusCode = 400;
-        throw err;
+        await session.abortTransaction();
+
+        return res.status(400).json({
+          success: false,
+          message: " Coupon usage limit exceeded",
+        });
       }
 
       // Calculate discount
@@ -117,9 +154,12 @@ exports.placeOrder = async (req, res) => {
         session,
       );
       if (!wallet || wallet.balance < grandTotal) {
-        const err = new Error("Insufficient wallet balance");
-        err.statusCode = 402;
-        throw err;
+        await session.abortTransaction();
+
+        return res.status(400).json({
+          success: false,
+          message: "Insufficient wallet balance",
+        });
       }
       wallet.balance -= grandTotal;
       walletUsed = grandTotal;
@@ -135,16 +175,20 @@ exports.placeOrder = async (req, res) => {
     for (const item of cart.items) {
       const product = await Product.findById(item.product).session(session);
       if (!product) {
-        const err = new Error(`Product not found: ${item.productName}`);
-        err.statusCode = 404;
-        throw err;
+        await session.abortTransaction();
+
+        return res.status(404).json({
+          success: false,
+          message: `Product not found: ${item.productName}`,
+        });
       }
       if (product.quantity < item.quantity) {
-        const err = new Error(
-          `Insufficient stock for ${item.productName}. Only ${product.quantity} available.`,
-        );
-        err.statusCode = 409;
-        throw err;
+        await session.abortTransaction();
+
+        return res.status(400).json({
+          success: false,
+          message: `Insufficient stock for ${item.productName}. Only ${product.quantity} available.`,
+        });
       }
     }
 
@@ -223,8 +267,13 @@ exports.placeOrder = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
-    const status = error.statusCode || 500;
-    return res.status(status).json({ success: false, message: error.message });
+
+    console.error(error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   } finally {
     session.endSession();
   }
@@ -236,10 +285,13 @@ exports.placeBuyNowOrder = async (req, res) => {
 
   try {
     const { buyNowId, paymentMethod, address } = req.body;
-    const userId = req.user._id;
+    const user = req.user;
+    const userId = user._id;
 
     // Validate payment
     if (!["cod", "wallet"].includes(paymentMethod)) {
+      await session.abortTransaction();
+
       return res
         .status(400)
         .json({ success: false, message: "Invalid payment method" });
@@ -247,6 +299,8 @@ exports.placeBuyNowOrder = async (req, res) => {
 
     // Validate address
     if (!address?.addressId || !address?.snapshot) {
+      await session.abortTransaction();
+
       return res
         .status(422)
         .json({ success: false, message: "Address required" });
@@ -256,21 +310,66 @@ exports.placeBuyNowOrder = async (req, res) => {
     const buyNow = await BuyNow.findOne({
       _id: buyNowId,
       userId,
+      status: "ACTIVE",
     })
       .populate("product.productId")
+      .populate("appliedCoupon")
       .session(session);
 
     if (!buyNow) {
+      await session.abortTransaction();
+
       return res.status(404).json({
         success: false,
         message: "Buy Now session expired",
       });
     }
 
-    const product = buyNow.product?.productId;
-    const quantity = 1;
-    const subTotal = product.salePrice;
-    const grandTotal = subTotal; // no coupon
+    if (buyNow.appliedCoupon) {
+      const coupon = await Coupon.findById(buyNow.appliedCoupon).session(
+        session,
+      );
+
+      if (!coupon) {
+        await session.abortTransaction();
+
+        return res.status(400).json({
+          success: false,
+          message: "Coupon no longer exists",
+        });
+      }
+
+      if (!coupon.isActive) {
+        await session.abortTransaction();
+
+        return res.status(400).json({
+          success: false,
+          message: "Coupon is inactive",
+        });
+      }
+      if (coupon.expiryDate < new Date()) {
+        await session.abortTransaction();
+
+        return res.status(400).json({
+          success: false,
+          message: "Coupon has expired",
+        });
+      }
+
+      if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
+        await session.abortTransaction();
+
+        return res.status(400).json({
+          success: false,
+          message: "Coupon usage limit exceeded",
+        });
+      }
+    }
+
+    const quantity = buyNow.quantity;
+    const subTotal = buyNow.subTotal;
+    const discount = buyNow.discount || 0;
+    const grandTotal = buyNow.finalTotal;
 
     // Wallet payment
     let walletUsed = 0;
@@ -278,6 +377,8 @@ exports.placeBuyNowOrder = async (req, res) => {
       const wallet = await Wallet.findOne({ userId }).session(session);
 
       if (!wallet || wallet.balance < grandTotal) {
+        await session.abortTransaction();
+
         return res.status(402).json({
           success: false,
           message: "Insufficient wallet balance",
@@ -296,8 +397,12 @@ exports.placeBuyNowOrder = async (req, res) => {
       await wallet.save({ session });
     }
 
+    const product = buyNow.product.productId;
+
     // Stock check
     if (product.quantity < quantity) {
+      await session.abortTransaction();
+
       return res.status(409).json({
         success: false,
         message: "Insufficient stock",
@@ -317,10 +422,10 @@ exports.placeBuyNowOrder = async (req, res) => {
       items: [
         {
           productId: product._id,
-          productName: product.productName,
-          productImage: product?.productImage[0],
+          productName: buyNow.product.name,
+          productImage: buyNow.product.image,
           quantity,
-          price: product.salePrice,
+          price: buyNow.product.price,
           subtotal: subTotal,
           itemStatus: "Confirmed",
         },
@@ -328,7 +433,9 @@ exports.placeBuyNowOrder = async (req, res) => {
       address,
       checkoutType: "buyNow",
       subTotal,
-      discount: 0,
+      couponId: buyNow.appliedCoupon?._id || null,
+      couponCode: buyNow.appliedCoupon?.code || null, 
+      discount,
       grandTotal,
       walletAmountUsed: walletUsed,
       paymentMethod,
@@ -338,9 +445,28 @@ exports.placeBuyNowOrder = async (req, res) => {
 
     await order.save({ session });
 
-    // Remove BuyNow session
-    await BuyNow.deleteOne({ _id: buyNowId }).session(session);
+    if (buyNow.appliedCoupon) {
+      await Coupon.findByIdAndUpdate(
+        buyNow.appliedCoupon._id,
+        { $inc: { usedCount: 1 } },
+        { session },
+      );
 
+      if (!user.usedCoupons) {
+        user.usedCoupons = [];
+      }
+
+      user.usedCoupons.push(buyNow.appliedCoupon._id);
+
+      await user.save({ session });
+    }
+
+    //  BuyNow session completed
+    await BuyNow.findByIdAndUpdate(
+      buyNowId,
+      { status: "COMPLETED" },
+      { session },
+    );
     await session.commitTransaction();
 
     try {
@@ -349,7 +475,7 @@ exports.placeBuyNowOrder = async (req, res) => {
       console.error("Invoice generation failed:", err.message);
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       message: "Buy Now order placed",
       orderId: order._id,
@@ -365,23 +491,75 @@ exports.placeBuyNowOrder = async (req, res) => {
 exports.getUserOrders = async (req, res) => {
   try {
     const user = req.user;
-    const orders = await Order.find({ userId: user._id })
+    const { search = "", status = "", time = "" } = req.query;
+
+    const query = { userId: user._id };
+
+    // flatmap - split() splits the string and create an array. flatmap maps through the array and flats it(no nested arrays)
+    if (status) {
+      const mappedStatuses = status
+        .split(",")
+        .flatMap((s) => ORDER_STATUS_GROUPS[s] || []);
+      if (mappedStatuses.length) {
+        // $in - eturn all orders where orderStatus is any one of these values.
+        query.orderStatus = { $in: mappedStatuses };
+      }
+    }
+
+    //  map(functionName)
+    // map() loops through every element of an array, calls the function for each element, and returns a NEW array containing the function's return values.
+
+    // Syntax
+
+    // array.map(function)
+
+    // is equivalent to
+
+    // array.map((element) => function(element))
+    if (time) {
+      // dateConditions array with functions date query return values
+      // filter(Boolean) → Removes all falsy values (null, undefined, false, 0, "", NaN) and keeps only truthy values. remove any null values returned by getOrderDateRange().
+      const dateConditions = time.split(",").map(getOrderDateRange).filter(Boolean);
+      if (dateConditions.length) {
+        // $or Return documents that satisfy any one of these conditions.
+        query.$or = dateConditions;
+      }
+    }
+
+    let orders = await Order.find(query)
       .populate("items.productId")
       .sort({ createdAt: -1 })
       .lean();
 
-    if (orders.length === 0) {
-      return res
-        .status(200)
-        .json({ success: true, message: "No orders found", data: [] });
+    if (search.trim()) {
+      const keyword = search.trim().toLowerCase();
+
+      orders = orders.filter((order) =>
+        order.items.some((item) => {
+          const name =
+            item.productName ||
+            item.productId?.productName ||
+            item.productId?.name ||
+            "";
+
+          return name.toLowerCase().includes(keyword);
+        }),
+      );
     }
+
     return res.status(200).json({
       success: true,
-      message: "Orders retrieved successfully",
+      message: orders.length
+        ? "Orders retrieved successfully"
+        : "No orders found",
       data: orders,
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: error.message });
+    console.error("Error fetching user orders:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   }
 };
 
@@ -429,18 +607,22 @@ exports.orderCancel = async (req, res) => {
 
     // validate Id
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
-      const err = new Error("Invalid order ID");
-      err.statusCode = 400;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        success: false,
+        message: "Invalid order ID",
+      });
     }
 
     // Add validation early
     if (reason && reason.length > 500) {
-      const err = new Error(
-        "Cancellation reason too long (max 500 characters)",
-      );
-      err.statusCode = 400;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        success: false,
+        message: "Cancellation reason too long (max 500 characters)",
+      });
     }
 
     //  find order
@@ -450,16 +632,22 @@ exports.orderCancel = async (req, res) => {
     }).session(session);
 
     if (!order) {
-      const err = new Error("Order not found");
-      err.statusCode = 400;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
     }
 
     // After finding order
     if (!order.items || order.items.length === 0) {
-      const err = new Error("Order has no items to cancel");
-      err.statusCode = 400;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        success: false,
+        message: "Order has no items to cancel",
+      });
     }
 
     // Check if order-level cancellation is allowed
@@ -475,12 +663,14 @@ exports.orderCancel = async (req, res) => {
         PartiallyReturnPending: "Some items have return requests in progress.",
       };
 
-      const err = new Error(
-        statusMsg[order.orderStatus] ||
+      await session.abortTransaction();
+
+      return res.status(409).json({
+        success: false,
+        message:
+          statusMsg[order.orderStatus] ||
           `Cannot cancel order in ${order.orderStatus} status`,
-      );
-      err.statusCode = 400;
-      throw err;
+      });
     }
 
     const invalidItem = order.items.find(
@@ -490,9 +680,12 @@ exports.orderCancel = async (req, res) => {
     );
 
     if (invalidItem) {
-      throw new Error(
-        `Cannot cancel order because item ${invalidItem._id} is ${invalidItem.itemStatus}`,
-      );
+      await session.abortTransaction();
+
+      return res.status(409).json({
+        success: false,
+        message: `Cannot cancel order because item "${invalidItem.productName}" is ${invalidItem.itemStatus}`,
+      });
     }
 
     const itemsToCancel = order.items.filter((item) =>
@@ -500,9 +693,12 @@ exports.orderCancel = async (req, res) => {
     );
 
     if (itemsToCancel.length === 0) {
-      const err = new Error("No cancellable items found in this order.");
-      err.statusCode = 400;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(409).json({
+        success: false,
+        message: "No cancellable items found in this order.",
+      });
     }
 
     // update order
@@ -550,9 +746,12 @@ exports.orderCancel = async (req, res) => {
       refundAmount = Math.min(maxRefundable, order.grandTotal);
 
       if (refundAmount <= 0) {
-        const err = new Error("No refundable amount available");
-        err.statusCode = 404;
-        throw err;
+        await session.abortTransaction();
+
+        return res.status(409).json({
+          success: false,
+          message: "No refundable amount available",
+        });
       }
 
       const walletUpdate = await Wallet.findOneAndUpdate(
@@ -571,7 +770,12 @@ exports.orderCancel = async (req, res) => {
       );
 
       if (!walletUpdate) {
-        throw new Error("Failed to update wallet balance");
+        await session.abortTransaction();
+
+        return res.status(500).json({
+          success: false,
+          message: "Failed to update wallet balance",
+        });
       }
 
       refundRecord = {
@@ -617,11 +821,12 @@ exports.orderCancel = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
+
     console.error("orderCancel error:", error);
-    const status = error.statusCode || 500;
-    return res.status(status).json({
+
+    return res.status(500).json({
       success: false,
-      message: error.message || "Failed to cancel order",
+      message: "Internal server error",
     });
   } finally {
     await session.endSession();
@@ -642,18 +847,22 @@ exports.cancelSingleItem = async (req, res) => {
       !mongoose.Types.ObjectId.isValid(orderId) ||
       !mongoose.Types.ObjectId.isValid(itemId)
     ) {
-      const err = new Error("Invalid orderId or itemId");
-      err.statusCode = 400;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        success: false,
+        message: "Invalid orderId or itemId",
+      });
     }
 
     // validate reason
     if (cancellationReason && cancellationReason.length > 500) {
-      const err = new Error(
-        "Cancellation reason too long (max 500 characters)",
-      );
-      err.statusCode = 400;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        success: false,
+        message: "Cancellation reason too long (max 500 characters)",
+      });
     }
 
     //find order
@@ -662,9 +871,12 @@ exports.cancelSingleItem = async (req, res) => {
       userId: user._id,
     }).session(session);
     if (!order) {
-      const err = new Error("Order not found");
-      err.statusCode = 404;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
     }
 
     // Check if order-level cancellation is allowed
@@ -679,26 +891,33 @@ exports.cancelSingleItem = async (req, res) => {
         PartiallyReturnPending: "Some items have return requests in progress.",
       };
 
-      const err = new Error(
-        statusMsg[order.orderStatus] || "Cannot cancel item",
-      );
-      err.statusCode = 400;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        success: false,
+        message: statusMsg[order.orderStatus] || "Cannot cancel item",
+      });
     }
 
     // find item
     const item = order.items.id(itemId);
     if (!item) {
-      const err = new Error("Item not found");
-      err.statusCode = 404;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        success: false,
+        message: "Item not found",
+      });
     }
 
     // check if item level cancellation is allowed
     if (!ITEM_CANCELLABLE_STATUSES.includes(item.itemStatus)) {
-      const err = new Error("Item cannot be cancelled");
-      err.statusCode = 409;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(409).json({
+        success: false,
+        message: "Item cannot be cancelled",
+      });
     }
 
     //CAPTURE ORIGINAL VALUES (BEFORE ANY CHANGES)
@@ -718,9 +937,12 @@ exports.cancelSingleItem = async (req, res) => {
     // Restore stock
     const product = await Product.findById(item.productId).session(session);
     if (!product) {
-      const err = new Error("Product not found");
-      err.statusCode = 404;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        success: false,
+        message: "Product not found",
+      });
     }
     product.quantity += item.quantity;
     await product.save({ session });
@@ -800,9 +1022,12 @@ exports.cancelSingleItem = async (req, res) => {
         );
 
         if (!walletUpdate) {
-          const err = new Error("Failed to update wallet balance");
-          err.statusCode = 500;
-          throw err;
+          await session.abortTransaction();
+
+          return res.status(500).json({
+            success: false,
+            message: "Failed to update wallet balance",
+          });
         }
 
         // Add refund record
@@ -864,12 +1089,12 @@ exports.cancelSingleItem = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
+
     console.error("cancelSingleItem error:", error);
-    console.log(error);
-    const status = error.statusCode || 500;
-    return res.status(status).json({
+
+    return res.status(500).json({
       success: false,
-      message: error.message || "Failed to cancel item",
+      message: "Internal server error",
     });
   } finally {
     await session.endSession();
@@ -1016,7 +1241,7 @@ exports.itemReturn = async (req, res) => {
         .json({ success: false, message: "Item not found in order" });
     }
 
-       // check is itemstatus is already returned or in return pending state
+    // check is itemstatus is already returned or in return pending state
     // partiallyreturnpending not included so user can retry return of the same item
     if (["Returned", "ReturnPending"].includes(item.itemStatus)) {
       return res.status(400).json({
@@ -1032,8 +1257,6 @@ exports.itemReturn = async (req, res) => {
         message: "Only delivered items can be returned",
       });
     }
-
- 
 
     // update item status
     item.itemStatus = "ReturnPending";

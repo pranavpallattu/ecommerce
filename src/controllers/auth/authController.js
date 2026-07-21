@@ -208,8 +208,6 @@ exports.verifyAuthOtp = async (req, res) => {
         { expiresIn: "1d" },
       );
 
-
-
       res.cookie("auth_token", token, cookieOptions);
 
       await Otp.deleteMany({ emailId: normalizedEmail });
@@ -241,8 +239,6 @@ exports.verifyAuthOtp = async (req, res) => {
       { expiresIn: "1d" },
     );
 
-
-
     res.cookie("auth_token", token, cookieOptions);
 
     await Otp.deleteMany({ emailId: normalizedEmail });
@@ -265,8 +261,6 @@ exports.verifyAuthOtp = async (req, res) => {
     });
   }
 };
-
-// controllers/userAuthController.js
 
 exports.logout = (req, res) => {
   res.clearCookie("auth_token", {

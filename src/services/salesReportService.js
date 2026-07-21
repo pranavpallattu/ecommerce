@@ -85,7 +85,7 @@ const generateSalesReport = async ({ filterType, startDate, endDate }) => {
     return sum + refundTotal;
   }, 0);
 
-  const netRevenue =  totalAmount - totalRefunded;
+  const netRevenue = totalAmount - totalRefunded;
 
   const cartOrders = await Order.find({
     checkoutType: "cart",

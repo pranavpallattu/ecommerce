@@ -2,39 +2,25 @@ const supabase = require("../../config/supabase");
 const Order = require("../../models/orderSchema");
 const generateInvoice = require("../../services/invoiceService");
 
-
 exports.createInvoiceIfNeeded = async (orderId) => {
   const order = await Order.findById(orderId).populate("items.productId");
 
   if (!order) throw new Error("Order not found");
 
-  // Only paid orders
-// Allow invoice for both Paid and COD
-// if (!["Paid", "Pending", "N/A"].includes(order.paymentStatus)) return;
-// Only prevent duplicate invoices
-if (order.invoice?.number) return;
   // Prevent duplicates
   if (order.invoice?.number) return;
 
-  // const { invoiceNumber, invoiceUrl, storagePath } =
-  //   await generateInvoice(order);
+  const { invoiceNumber, storagePath, generatedAt } =
+    await generateInvoice(order);
 
-    // console.log(invoiceNumber,  invoiceUrl,   storagePath);
-    
-
- const { invoiceNumber, storagePath, generatedAt } =
-  await generateInvoice(order);
-
-order.invoice = {
-  number: invoiceNumber,
-  storagePath,
-  generatedAt,
-};
+  order.invoice = {
+    number: invoiceNumber,
+    storagePath,
+    generatedAt,
+  };
 
   await order.save();
 };
-
-
 
 exports.downloadInvoice = async (req, res) => {
   try {

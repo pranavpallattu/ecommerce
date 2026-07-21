@@ -6,7 +6,9 @@ const Cart = require("../../models/cartSchema");
 exports.getWishlist = async (req, res) => {
   try {
     const user = req.user;
-    const wishlist = await Wishlist.findOne({ userId: user._id }).populate("products.product");
+    const wishlist = await Wishlist.findOne({ userId: user._id }).populate(
+      "products.product",
+    );
 
     if (!wishlist) {
       return res.status(200).json({
@@ -14,6 +16,8 @@ exports.getWishlist = async (req, res) => {
         message: "wishlist is empty",
       });
     }
+
+    wishlist.products.reverse();
 
     return res.status(200).json({
       success: true,
@@ -66,7 +70,7 @@ exports.addToWishlistController = async (req, res) => {
     //   check is product already exists in wishlist
 
     const productExists = wishlist.products.some(
-      (item) => item.product.toString() === productId
+      (item) => item.product.toString() === productId,
     );
 
     if (productExists) {
@@ -83,7 +87,7 @@ exports.addToWishlistController = async (req, res) => {
       data: wishlist,
     });
   } catch (error) {
-    console.error(error.message)
+    console.error(error.message);
     return res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -107,7 +111,7 @@ exports.removeFromWishlist = async (req, res) => {
     }
 
     const productExistsInWishlist = wishlist.products.some(
-      (item) => item.product.toString() === productId
+      (item) => item.product.toString() === productId,
     );
     if (!productExistsInWishlist) {
       return res.status(404).json({
@@ -117,7 +121,7 @@ exports.removeFromWishlist = async (req, res) => {
     }
 
     wishlist.products = wishlist.products.filter(
-      (item) => item.product.toString() !== productId
+      (item) => item.product.toString() !== productId,
     );
 
     await wishlist.save();

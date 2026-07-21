@@ -60,9 +60,9 @@ exports.addCouponController = async (req, res) => {
     usageLimit,
     perUserLimit,
   } = req.body;
-  
+
   console.log(usageLimit);
-  
+
   try {
     const parsedDiscount = Number(discount);
     const parsedMinPurchase = Number(minPurchase);
@@ -90,7 +90,6 @@ exports.addCouponController = async (req, res) => {
     };
 
     console.log(couponData);
-    
 
     try {
       validateCouponData(couponData);
@@ -139,7 +138,9 @@ exports.editCouponController = async (req, res) => {
     }
 
     if (
-      updateData.discountType  !== undefined && updateData.discountType !== existingCoupon.discountType) {
+      updateData.discountType !== undefined &&
+      updateData.discountType !== existingCoupon.discountType
+    ) {
       return res.status(400).json({
         success: false,
         message:
@@ -148,7 +149,7 @@ exports.editCouponController = async (req, res) => {
     }
 
     try {
-      validateEditCouponData(updateData,existingCoupon);
+      validateEditCouponData(updateData, existingCoupon);
     } catch (validationError) {
       return res
         .status(400)
@@ -191,7 +192,7 @@ exports.editCouponController = async (req, res) => {
       {
         $set: updateData,
       },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     return res.status(200).json({

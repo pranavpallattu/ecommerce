@@ -75,18 +75,32 @@ exports.getOrderSummary = async (req, res) => {
       createdAt: { $gte: startDate, $lte: endDate },
     }).populate("items.productId");
 
-   const cartOrders = orders.filter(o => o.checkoutType === "cart").length;
-const buynowOrders = orders.filter(o => o.checkoutType === "buyNow").length;
-
+    const cartOrders = orders.filter((o) => o.checkoutType === "cart").length;
+    const buynowOrders = orders.filter(
+      (o) => o.checkoutType === "buyNow",
+    ).length;
 
     const totalAmount = orders.reduce(
       (sum, order) => sum + (order.grandTotal || 0),
       0,
     );
 
-    // -------- Default Summary ----------
+    const totalRefunded = orders.reduce((sum, order) => {
+      const refundTotal = (order.refunds || []).reduce(
+        (rSum, refund) => rSum + (refund?.amount || 0),
+        0,
+      );
+
+      return sum + refundTotal;
+    }, 0);
+
+    const netRevenue = totalAmount - totalRefunded;
+
+    // Default Summary
     const summary = {
       totalAmount,
+      totalRefunded,
+      netRevenue,
       totalOrders: 0,
       cartOrders,
       buynowOrders,
@@ -103,7 +117,7 @@ const buynowOrders = orders.filter(o => o.checkoutType === "buyNow").length;
       returnRejected: 0,
     };
 
-    // -------- Prepare Response ----------
+    //  Response
     orderSummary.forEach((item) => {
       summary.totalOrders += item.count;
       summary[item._id.toLowerCase()] = item.count;

@@ -13,6 +13,8 @@ const couponSchema = new mongoose.Schema(
       type: String,
       trim: true,
       required: true,
+      minlength: 5,
+      maxlength: 200,
     },
     discountType: {
       type: String,
@@ -72,7 +74,7 @@ const couponSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 const Coupon = mongoose.model("Coupon", couponSchema);

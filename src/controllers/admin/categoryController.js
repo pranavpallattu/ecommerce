@@ -1,7 +1,7 @@
 const Category = require("../../models/categorySchema");
 const { validateCategoryData } = require("../../utils/validation");
 
-// Helper: Normalize name
+// Normalize name
 const normalizeName = (name) => name.trim().toLowerCase();
 
 exports.addCategoryController = async (req, res) => {
@@ -11,7 +11,7 @@ exports.addCategoryController = async (req, res) => {
     // Duplicate check
     const existing = await Category.findOne({
       name: normalizeName(name),
-        deletedAt: null,
+      deletedAt: null,
     });
 
     if (existing) {
@@ -44,7 +44,6 @@ exports.addCategoryController = async (req, res) => {
   }
 };
 
-
 exports.editCategoryController = async (req, res) => {
   try {
     const { id } = req.params;
@@ -69,7 +68,7 @@ exports.editCategoryController = async (req, res) => {
     const normalized = normalizeName(name);
     const duplicate = await Category.findOne({
       name: normalized,
-        deletedAt: null,
+      deletedAt: null,
       _id: { $ne: id },
     });
 
@@ -154,7 +153,6 @@ exports.unListCategoryController = async (req, res) => {
   }
 };
 
-
 exports.softDeleteCategoryController = async (req, res) => {
   try {
     const { id } = req.params;
@@ -222,6 +220,28 @@ exports.getCategoriesController = async (req, res) => {
         hasNextPage: page < totalPages,
         hasPrevPage: page > 1,
       },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.getActiveCategoriesController = async (req, res) => {
+  try {
+    const categories = await Category.find({
+      deletedAt: null,
+      isActive: true,
+    })
+      .select("_id name")
+      .sort({ name: 1 });
+
+    return res.status(200).json({
+      success: true,
+      message: "Active categories retrieved successfully",
+      data: categories,
     });
   } catch (error) {
     return res.status(500).json({

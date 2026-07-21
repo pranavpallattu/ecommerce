@@ -55,7 +55,7 @@ exports.addToCart = async (req, res) => {
     }
 
     const productAlreadyExists = cart.items.some(
-      (item) => item.product.toString() === productId
+      (item) => item.product.toString() === productId,
     );
 
     if (productAlreadyExists) {
@@ -110,12 +110,12 @@ exports.getCart = async (req, res) => {
     }
 
     // Revalidate coupon for response only (without saving) - to not validate rest principle by saving data in a get call we are not modifying db
-    const tempCart = await revalidateCoupon(cart);
-
+    const validatedCart = await revalidateCoupon(cart);
+    validatedCart.items.reverse()
     return res.status(200).json({
       success: true,
       message: "Cart data is retrieved successfully",
-      data: tempCart,
+      data: validatedCart,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -141,7 +141,7 @@ exports.removeFromCart = async (req, res) => {
       });
     }
     const productExists = cart.items.some(
-      (item) => item.product.toString() === productId
+      (item) => item.product.toString() === productId,
     );
     if (!productExists) {
       return res
@@ -150,10 +150,10 @@ exports.removeFromCart = async (req, res) => {
     }
 
     cart.items = cart.items.filter(
-      (item) => item.product.toString() !== productId
+      (item) => item.product.toString() !== productId,
     );
 
-    // 🔹 Recalculate subtotal here
+    //  Recalculate subtotal here
     cart.totalItems = cart.items.length;
     cart.subTotal = calculateSubTotal(cart.items);
     cart = await revalidateCoupon(cart);
@@ -184,7 +184,7 @@ exports.updateQuantity = async (req, res) => {
     }
 
     if (
-      !quantity  ||
+      !quantity ||
       isNaN(parsedQuantity) ||
       !Number.isInteger(parsedQuantity) ||
       parsedQuantity < 1
@@ -203,7 +203,7 @@ exports.updateQuantity = async (req, res) => {
     }
 
     const cartItem = cart.items.find(
-      (item) => item.product.toString() === productId
+      (item) => item.product.toString() === productId,
     );
     if (!cartItem) {
       return res
@@ -247,6 +247,3 @@ exports.updateQuantity = async (req, res) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
-
-
-

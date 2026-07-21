@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/userSchema");
 
+// Verifies JWT, authenticates the user, and attaches user data to the request
 const authMiddleware = async (req, res, next) => {
   try {
     const token = req.cookies.auth_token;
@@ -21,6 +22,8 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
+
+// Allows access only to users with the admin role
 const adminMiddleware = (req, res, next) => {
   if (req.role !== "admin") {
     return res.status(403).json({ message: "Admins only" });
@@ -28,5 +31,17 @@ const adminMiddleware = (req, res, next) => {
   next();
 };
 
-module.exports = { authMiddleware, adminMiddleware };
+// Blocks admins and allows access only to regular customers
+const userMiddleware = (req, res, next) => {
+  if (req.user.isAdmin) {
+    return res.status(403).json({
+      success: false,
+      message: "Admins cannot access customer features.",
+    });
+  }
+
+  next();
+};
+
+module.exports = { authMiddleware, adminMiddleware, userMiddleware };
 

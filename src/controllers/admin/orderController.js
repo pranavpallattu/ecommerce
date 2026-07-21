@@ -124,7 +124,7 @@ exports.orderStatus = async (req, res) => {
     "Cancelled",
   ];
   const session = await mongoose.startSession();
-  session.startTransaction();
+  await session.startTransaction();
   try {
     const { orderId } = req.params;
     const { status } = req.body;
@@ -142,36 +142,38 @@ exports.orderStatus = async (req, res) => {
 
     const validStatuses = Object.keys(STATUS_TRANSITIONS);
     if (!status || !validStatuses.includes(status)) {
-      const err = new Error(
-        `Invalid status value. Allowed statuses: ${validStatuses.join(", ")}.`,
-      );
-      err.statusCode = 400;
-      throw err;
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status value. Allowed statuses: ${validStatuses.join(", ")}.`,
+      });
     }
 
     const order = await Order.findById(orderId).session(session);
     if (!order) {
-      const err = new Error("Order not found");
-      err.statusCode = 404;
-      throw err;
+      await session.abortTransaction();
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
     }
 
     // prevent same status
     if (order.orderStatus === status) {
-      const err = new Error(
-        `The order is already marked as '${status}'. No update required.`,
-      );
-      err.statusCode = 400;
-      throw err;
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: `The order is already marked as '${status}'. No update required.`,
+      });
     }
 
     const statusAllowedNext = STATUS_TRANSITIONS[order.orderStatus] || [];
     if (!statusAllowedNext.includes(status)) {
-      const err = new Error(
-        `Invalid status transition: cannot move order from '${order.orderStatus}' to '${status}'.`,
-      );
-      err.statusCode = 400;
-      throw err;
+      await session.abortTransaction();
+      return res.status(400).json({
+        success: false,
+        message: `Invalid status transition: cannot move order from '${order.orderStatus}' to '${status}'.`,
+      });
     }
 
     if (status === "Processing") {
@@ -179,11 +181,12 @@ exports.orderStatus = async (req, res) => {
         order.orderStatus !== "Confirmed" &&
         order.orderStatus !== "PartiallyCancelled"
       ) {
-        const err = new Error(
-          "Order must be in the 'Confirmed' state before moving to 'Processing'.",
-        );
-        err.statusCode = 400;
-        throw err;
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message:
+            "Order must be in the 'Confirmed' state before moving to 'Processing'.",
+        });
       }
       order.items.forEach((item) => {
         if (item.itemStatus === "Cancelled") return;
@@ -203,11 +206,12 @@ exports.orderStatus = async (req, res) => {
 
     if (status === "Shipped") {
       if (order.orderStatus !== "Processing") {
-        const err = new Error(
-          "Order must be in the 'Processing' state before marking it as 'Shipped'.",
-        );
-        err.statusCode = 400;
-        throw err;
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message:
+            "Order must be in the 'Processing' state before marking it as 'Shipped'.",
+        });
       }
       order.items.forEach((item) => {
         if (item.itemStatus === "Cancelled") return;
@@ -227,11 +231,12 @@ exports.orderStatus = async (req, res) => {
 
     if (status === "Delivered") {
       if (order.orderStatus !== "Shipped") {
-        const err = new Error(
-          "Order must be in the 'Shipped' state before marking it as 'Delivered'.",
-        );
-        err.statusCode = 400;
-        throw err;
+        await session.abortTransaction();
+        return res.status(400).json({
+          success: false,
+          message:
+            "Order must be in the 'Shipped' state before marking it as 'Delivered'.",
+        });
       }
 
       order.items.forEach((item) => {
@@ -257,11 +262,11 @@ exports.orderStatus = async (req, res) => {
     if (status === "Cancelled") {
       for (const item of order.items) {
         if (!CANCELLABLE_ITEM_STATUSES.includes(item.itemStatus)) {
-          const err = new Error(
-            `Item ${item.productId} cannot be cancelled (current status: ${item.itemStatus}).`,
-          );
-          err.statusCode = 400;
-          throw err;
+          await session.abortTransaction();
+          return res.status(400).json({
+            success: false,
+            message: `Item ${item.productId} cannot be cancelled (current status: ${item.itemStatus}).`,
+          });
         }
       }
 
@@ -270,11 +275,13 @@ exports.orderStatus = async (req, res) => {
 
         const product = await Product.findById(item.productId).session(session);
 
-if (!product) {
-  const err = new Error(`Product ${item.productId} not found`);
-  err.statusCode = 404;
-  throw err;
-}
+        if (!product) {
+          await session.abortTransaction();
+          return res.status(404).json({
+            success: false,
+            message: `Product ${item.productId} not found`,
+          });
+        }
 
         product.quantity += item.quantity;
         await product.save({ session });
@@ -295,9 +302,11 @@ if (!product) {
         refundAmount = Math.min(order.grandTotal, maxRefundable);
 
         if (refundAmount <= 0) {
-          const err = new Error("No refundable amount remaining");
-          err.statusCode = 400;
-          throw err;
+          await session.abortTransaction();
+          return res.status(400).json({
+            success: false,
+            message: "No refundable amount remaining",
+          });
         }
         if (refundAmount > 0) {
           const walletUpdate = await Wallet.findOneAndUpdate(
@@ -316,11 +325,12 @@ if (!product) {
           );
 
           if (!walletUpdate) {
-            const err = new Error(
-              "Failed to update wallet balance. Refund could not be processed.",
-            );
-            err.statusCode = 400;
-            throw err;
+            await session.abortTransaction();
+            return res.status(500).json({
+              success: false,
+              message:
+                "Failed to update wallet balance. Refund could not be processed.",
+            });
           }
 
           refundRecord = {
@@ -387,9 +397,20 @@ if (!product) {
     // wallet Refund
   } catch (error) {
     await session.abortTransaction();
-    const status = error.statusCode || 500;
-    console.error("Error updating order status", error);
-    return res.status(status).json({ success: false, message: error.message });
+
+    console.error("Error updating order status:", error);
+
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({
+        success: false,
+        message: error.message,
+      });
+    }
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   } finally {
     await session.endSession();
   }
@@ -397,49 +418,62 @@ if (!product) {
 
 exports.orderReturnApprove = async (req, res) => {
   const session = await mongoose.startSession();
-  session.startTransaction();
+  await session.startTransaction();
 
   try {
     const { orderId } = req.params;
 
     // validate orderId
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
-      const err = new Error("OrderId is not valid");
-      err.statusCode = 400;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        success: false,
+        message: "Order is not  valid",
+      });
     }
 
     // find order
     const order = await Order.findById(orderId).session(session);
     if (!order) {
-      const err = new Error("Order not found");
-      err.statusCode = 404;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
     }
 
     // check is order already returned
     if (order.orderStatus == "Returned") {
-      const err = new Error("Order already returned");
-      err.statusCode = 409;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(409).json({
+        success: false,
+        message: "Order already returned",
+      });
     }
 
     // check if order is in return pending state
     if (order.orderStatus !== "ReturnPending") {
-      const err = new Error("Order not in return pending state");
-      err.statusCode = 400;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        success: false,
+        message: "Order not in return pending state",
+      });
     }
 
     // Pre-check all items BEFORE restore
     // Validate all items are in ReturnPending status
     for (const item of order.items) {
       if (item.itemStatus !== "ReturnPending") {
-        const err = new Error(
-          `Item ${item.productId} is not in ReturnPending status (current: ${item.itemStatus})`,
-        );
-        err.statusCode = 400;
-        throw err;
+        await session.abortTransaction();
+
+        return res.status(400).json({
+          success: false,
+          message: `Item ${item.productId} is not in ReturnPending status (current: ${item.itemStatus})`,
+        });
       }
     }
 
@@ -447,9 +481,12 @@ exports.orderReturnApprove = async (req, res) => {
     for (const item of order.items) {
       const product = await Product.findById(item.productId).session(session);
       if (!product) {
-        const err = new Error(`Product not found for item ${item.productId}`);
-        err.statusCode = 404;
-        throw err;
+        await session.abortTransaction();
+
+        return res.status(404).json({
+          success: false,
+          message: `Product not found for item ${item.productId}`,
+        });
       }
       product.quantity += item.quantity;
       await product.save({ session });
@@ -481,9 +518,12 @@ exports.orderReturnApprove = async (req, res) => {
     refundAmount = Math.min(maxRefundableAmount, order.grandTotal);
 
     if (refundAmount <= 0) {
-      const err = new Error("No refundable amount available");
-      err.statusCode = 400;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        success: false,
+        message: "No refundable amount available",
+      });
     }
 
     const walletUpdate = await Wallet.findOneAndUpdate(
@@ -504,7 +544,12 @@ exports.orderReturnApprove = async (req, res) => {
     );
 
     if (!walletUpdate) {
-      throw new Error("Failed to update wallet balance");
+      await session.abortTransaction();
+
+      return res.status(500).json({
+        success: false,
+        message: "Failed to update wallet balance",
+      });
     }
 
     refundRecord = {
@@ -548,7 +593,6 @@ exports.orderReturnApprove = async (req, res) => {
       console.error("SMS failed:", err.message);
     }
 
-    // 10. Success
     return res.status(200).json({
       success: true,
       message: `Order Return approved successfully`,
@@ -563,9 +607,13 @@ exports.orderReturnApprove = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
+
     console.error("Error updating order return approve", error);
-    const status = error.statusCode || 500;
-    return res.status(status).json({ success: false, message: error.message });
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   } finally {
     await session.endSession();
   }
@@ -783,41 +831,54 @@ exports.itemReturnApprove = async (req, res) => {
       !mongoose.Types.ObjectId.isValid(orderId) ||
       !mongoose.Types.ObjectId.isValid(itemId)
     ) {
-      const err = new Error("Invalid orderId or itemId");
-      err.statusCode = 400;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        success: false,
+        message: "Invalid orderId or itemId",
+      });
     }
 
     //find order
     const order = await Order.findById(orderId).session(session);
     if (!order) {
-      const err = new Error("Order not found");
-      err.statusCode = 404;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
     }
 
     // find the specific item
     const item = order.items.id(itemId);
     if (!item) {
-      const err = new Error("item not found");
-      err.statusCode = 404;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        success: false,
+        message: "Item not found",
+      });
     }
 
     // validation
 
     if (item.itemStatus === "Returned") {
-      const err = new Error("item already in Returned state");
-      err.statusCode = 409;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(409).json({
+        success: false,
+        message: "Item already returned",
+      });
     }
 
     if (item.itemStatus !== "ReturnPending") {
-      const err = new Error(
-        "Only items in Return Pending state can be returned",
-      );
-      err.statusCode = 409;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(409).json({
+        success: false,
+        message: "Only items in ReturnPending state can be returned",
+      });
     }
 
     //CAPTURE ORIGINAL VALUES (BEFORE ANY CHANGES)
@@ -833,9 +894,12 @@ exports.itemReturnApprove = async (req, res) => {
 
     const product = await Product.findById(item.productId).session(session);
     if (!product) {
-      const err = new Error(`Product not found: ${item.productId}`);
-      err.statusCode = 404;
-      throw err;
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        success: false,
+        message: `Product not found`,
+      });
     }
     product.quantity += item.quantity;
     await product.save({ session });
@@ -880,7 +944,6 @@ exports.itemReturnApprove = async (req, res) => {
     } else {
       order.orderStatus = "Delivered";
     }
-    // await order.save({ session });
 
     // Calculate max refundable
     // PRORATE DISCOUNT
@@ -915,9 +978,12 @@ exports.itemReturnApprove = async (req, res) => {
       );
 
       if (!walletUpdate) {
-        const err = new Error("Failed to update wallet balance");
-        err.statusCode = 500;
-        throw err;
+        await session.abortTransaction();
+
+        return res.status(500).json({
+          success: false,
+          message: "Failed to update wallet balance",
+        });
       }
 
       refundRecord = {
@@ -961,10 +1027,9 @@ exports.itemReturnApprove = async (req, res) => {
       console.error("SMS failed:", err.message);
     }
 
-    // 10. Success
     return res.status(200).json({
       success: true,
-      message: `item Return approved successfully`,
+      message: `item returned successfully`,
       data: {
         orderId: order._id,
         itemId,
@@ -979,9 +1044,13 @@ exports.itemReturnApprove = async (req, res) => {
     });
   } catch (error) {
     await session.abortTransaction();
-    const status = error.statusCode || 500;
-    console.error("Error updating item return approve", error);
-    return res.status(status).json({ success: false, message: error.message });
+
+    console.error("Error approving item return:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
   } finally {
     await session.endSession();
   }

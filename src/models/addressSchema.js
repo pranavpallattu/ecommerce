@@ -62,10 +62,10 @@ const addressSchema = new mongoose.Schema(
     },
     deletedAt: {
       type: Date,
-      default: null
+      default: null,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const Address = mongoose.model("Address", addressSchema);

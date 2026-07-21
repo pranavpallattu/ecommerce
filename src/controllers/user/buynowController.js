@@ -1,5 +1,5 @@
 const Product = require("../../models/productSchema");
-const BuyNow=require("../../models/buynowSchema")
+const BuyNow = require("../../models/buynowSchema");
 
 exports.createBuynow = async (req, res) => {
   try {
@@ -60,8 +60,6 @@ exports.getBuyNowCheckout = async (req, res) => {
       status: "ACTIVE",
     });
 
-    
-
     if (!buyNow) {
       return res.status(404).json({
         success: false,
@@ -78,5 +76,3 @@ exports.getBuyNowCheckout = async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
-
-

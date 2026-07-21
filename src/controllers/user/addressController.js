@@ -49,7 +49,7 @@ exports.addAddressController = async (req, res) => {
     if (shouldBeDefault) {
       await Address.updateMany(
         { userId: user._id, isDefault: true },
-        { $set: { isDefault: false } }
+        { $set: { isDefault: false } },
       );
     }
 
@@ -86,8 +86,8 @@ exports.getAddressController = async (req, res) => {
       userId,
       deletedAt: null,
     }).sort({
-      isDefault: -1,  // default first
-      createdAt: -1,  // latest next
+      isDefault: -1, // default first
+      createdAt: -1, // latest next
     });
 
     const defaultAddress = addresses.length > 0 ? addresses[0] : null;
@@ -108,8 +108,6 @@ exports.getAddressController = async (req, res) => {
     });
   }
 };
-
-
 
 exports.softDeleteAddressController = async (req, res) => {
   try {
@@ -149,7 +147,7 @@ exports.softDeleteAddressController = async (req, res) => {
 exports.editAddressController = async (req, res) => {
   try {
     console.log(req.body);
-    
+
     const { id } = req.params;
     const user = req.user;
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -169,25 +167,22 @@ exports.editAddressController = async (req, res) => {
         .json({ success: false, message: "Address not found" });
     }
 
-      // Convert isDefault string to boolean if needed
+    // Convert isDefault string to boolean if needed
     if (req.body.isDefault !== undefined) {
       if (req.body.isDefault === "true" || req.body.isDefault === true) {
         req.body.isDefault = true;
-      } else if (req.body.isDefault === "false" || req.body.isDefault === false) {
+      } else if (
+        req.body.isDefault === "false" ||
+        req.body.isDefault === false
+      ) {
         req.body.isDefault = false;
       }
     }
 
-    // try {
-    //   validateEditAddressData(req.body);
-    // } catch (error) {
-    //   return res.status(400).json({ success: false, message: error.message });
-    // }
-
     if (req.body.isDefault === true) {
       await Address.updateMany(
         { userId: user._id, isDefault: true },
-        { $set: { isDefault: false } }
+        { $set: { isDefault: false } },
       );
     }
 
@@ -196,11 +191,10 @@ exports.editAddressController = async (req, res) => {
       if (value !== undefined) cleanData[key] = value;
     }
     console.log(cleanData);
-    
 
     Object.assign(existingAddress, cleanData);
     console.log(existingAddress);
-    
+
     await existingAddress.save();
 
     return res.status(200).json({

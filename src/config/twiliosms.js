@@ -1,12 +1,12 @@
-const twilio=require("twilio")
-const twilioClient= twilio(
-    process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-)
+const twilio = require("twilio");
+const twilioClient = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN,
+);
 
-async function sendSMS(to, message){
- try {
-    const sms = await  twilioClient.messages.create({
+async function sendSMS(to, message) {
+  try {
+    const sms = await twilioClient.messages.create({
       body: message,
       from: process.env.TWILIO_PHONE_NUMBER,
       to: to, // Must be in E.164 format like +91XXXXXXXXXX
@@ -19,4 +19,4 @@ async function sendSMS(to, message){
   }
 }
 
-module.exports=sendSMS
+module.exports = sendSMS;

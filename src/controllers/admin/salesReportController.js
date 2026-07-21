@@ -21,9 +21,7 @@ exports.getSalesReport = async (req, res) => {
   }
 };
 
-// src/controllers/salesController.js
 const dayjs = require("dayjs");
-
 
 exports.downloadSalesPDF = async (req, res) => {
   try {
@@ -43,7 +41,7 @@ exports.downloadSalesPDF = async (req, res) => {
 
     doc.pipe(res);
 
-    // ====================== HEADER WITH LOGO ======================
+    //  HEADER WITH LOGO
     const logoUrl =
       "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSgiPftJFEcFuclHRqhqXpbM58OXt2F5zRmtA&s";
 
@@ -87,7 +85,7 @@ exports.downloadSalesPDF = async (req, res) => {
     doc.moveTo(50, doc.y).lineTo(550, doc.y).lineWidth(2.5).stroke("#1e40af");
     doc.moveDown(2.5);
 
-    // ====================== CENTERED TITLE ======================
+    //  CENTERED TITLE
     doc
       .fontSize(22)
       .font("Helvetica-Bold")
@@ -104,7 +102,7 @@ exports.downloadSalesPDF = async (req, res) => {
 
     doc.moveDown(2.5);
 
-    // ====================== OVERALL SUMMARY ======================
+    //  OVERALL SUMMARY
     doc
       .fontSize(16)
       .font("Helvetica-Bold")
@@ -116,16 +114,16 @@ exports.downloadSalesPDF = async (req, res) => {
     const summaryX = 70;
     doc.fontSize(12).font("Helvetica");
 
-  const summaryData = [
-  ["Total Orders", data.totalOrders],
-  ["Cart Orders", data.cartOrders],
-  ["Buy Now Orders", data.buynowOrders],
-  ["Total Revenue", formatCurrency(data.totalAmount)],
-  ["Net Revenue", formatCurrency(data.netRevenue)], // Add this
-  ["Total Discount", formatCurrency(data.totalDiscount)],
-  ["Coupon Deduction", formatCurrency(data.couponDeduction)],
-  ["Total Refunded", formatCurrency(data.totalRefunded)],
-];
+    const summaryData = [
+      ["Total Orders", data.totalOrders],
+      ["Cart Orders", data.cartOrders],
+      ["Buy Now Orders", data.buynowOrders],
+      ["Total Revenue", formatCurrency(data.totalAmount)],
+      ["Net Revenue", formatCurrency(data.netRevenue)], // Add this
+      ["Total Discount", formatCurrency(data.totalDiscount)],
+      ["Coupon Deduction", formatCurrency(data.couponDeduction)],
+      ["Total Refunded", formatCurrency(data.totalRefunded)],
+    ];
 
     summaryData.forEach(([label, value]) => {
       doc.text(label, summaryX, doc.y);
@@ -137,7 +135,7 @@ exports.downloadSalesPDF = async (req, res) => {
     doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke("#94a3b8");
     doc.moveDown(1.5);
 
-    // ====================== ORDER STATUS BREAKDOWN ======================
+    //  ORDER STATUS BREAKDOWN
     doc
       .fontSize(16)
       .font("Helvetica-Bold")
@@ -155,25 +153,25 @@ exports.downloadSalesPDF = async (req, res) => {
 
     doc.font("Helvetica").fontSize(11).fillColor("#334155");
 
-const statusList = [
-  ["Pending", data.pending],
-  ["Confirmed", data.confirmed],
-  ["Processing", data.processing],
-  ["Shipped", data.shipped],
-  ["Delivered", data.delivered],
-  ["Cancelled", data.cancelled],
+    const statusList = [
+      ["Pending", data.pending],
+      ["Confirmed", data.confirmed],
+      ["Processing", data.processing],
+      ["Shipped", data.shipped],
+      ["Delivered", data.delivered],
+      ["Cancelled", data.cancelled],
 
-  ["Partially Cancelled", data.partiallyCancelled],
+      ["Partially Cancelled", data.partiallyCancelled],
 
-  ["Return Pending", data.returnPending],
-  ["Partially Return Pending", data.partiallyReturnPending],
+      ["Return Pending", data.returnPending],
+      ["Partially Return Pending", data.partiallyReturnPending],
 
-  ["Returned", data.returned],
-  ["Partially Returned", data.partiallyReturned],
+      ["Returned", data.returned],
+      ["Partially Returned", data.partiallyReturned],
 
-  ["Return Rejected", data.returnRejected],
-  ["Partially Return Rejected", data.partiallyReturnRejected],
-];
+      ["Return Rejected", data.returnRejected],
+      ["Partially Return Rejected", data.partiallyReturnRejected],
+    ];
 
     statusList.forEach(([status, count]) => {
       doc.text(status, 70, doc.y);
@@ -181,7 +179,7 @@ const statusList = [
       doc.moveDown(0.65);
     });
 
-    // ====================== FOOTER ======================
+    //  FOOTER
     doc
       .fontSize(10)
       .fillColor("#64748b")
@@ -204,7 +202,7 @@ exports.downloadSalesExcel = async (req, res) => {
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet("One Bazaar Sales Report");
 
-    // ---------- HEADER ----------
+    //  HEADER
     sheet.mergeCells("A1", "B1");
     sheet.getCell("A1").value = "One Bazaar Sales Report";
     sheet.getCell("A1").font = { size: 18, bold: true };
@@ -214,64 +212,64 @@ exports.downloadSalesExcel = async (req, res) => {
     sheet.addRow(["Generated On", new Date().toLocaleString()]);
     sheet.addRow([]);
 
-    // ---------- DATE RANGE ----------
+    //  DATE RANGE
     sheet.addRow(["Start Date", data.startDate]);
     sheet.addRow(["End Date", data.endDate]);
     sheet.addRow([]);
 
-    // ---------- SUMMARY ----------
-const row = sheet.addRow(["Total Orders", data.totalOrders]);
-row.getCell(1).font = { bold: true };
-sheet.addRow(["Cart Orders", data.cartOrders]);
-sheet.addRow(["Buy Now Orders", data.buynowOrders]);
+    //  SUMMARY
+    const row = sheet.addRow(["Total Orders", data.totalOrders]);
+    row.getCell(1).font = { bold: true };
+    sheet.addRow(["Cart Orders", data.cartOrders]);
+    sheet.addRow(["Buy Now Orders", data.buynowOrders]);
 
-sheet.addRow([
-  "Total Revenue",
-  `₹${Number(data.totalAmount).toLocaleString("en-IN")}`,
-]);
+    sheet.addRow([
+      "Total Revenue",
+      `₹${Number(data.totalAmount).toLocaleString("en-IN")}`,
+    ]);
 
-sheet.addRow([
-  "Net Revenue",
-  `₹${Number(data.netRevenue).toLocaleString("en-IN")}`,
-]);
+    sheet.addRow([
+      "Net Revenue",
+      `₹${Number(data.netRevenue).toLocaleString("en-IN")}`,
+    ]);
 
-sheet.addRow([
-  "Total Discount",
-  `₹${Number(data.totalDiscount).toLocaleString("en-IN")}`,
-]);
+    sheet.addRow([
+      "Total Discount",
+      `₹${Number(data.totalDiscount).toLocaleString("en-IN")}`,
+    ]);
 
-sheet.addRow([
-  "Coupon Deduction",
-  `₹${Number(data.couponDeduction).toLocaleString("en-IN")}`,
-]);
+    sheet.addRow([
+      "Coupon Deduction",
+      `₹${Number(data.couponDeduction).toLocaleString("en-IN")}`,
+    ]);
 
-sheet.addRow([
-  "Total Refunded",
-  `₹${Number(data.totalRefunded).toLocaleString("en-IN")}`,
-]);
+    sheet.addRow([
+      "Total Refunded",
+      `₹${Number(data.totalRefunded).toLocaleString("en-IN")}`,
+    ]);
     sheet.addRow([]);
 
-    // ---------- STATUS TABLE ----------
+    //  STATUS TABLE
     sheet.addRow(["Order Status", "Count"]).font = { bold: true };
- const rows = [
-  ["Pending", data.pending],
-  ["Confirmed", data.confirmed],
-  ["Processing", data.processing],
-  ["Shipped", data.shipped],
-  ["Delivered", data.delivered],
-  ["Cancelled", data.cancelled],
+    const rows = [
+      ["Pending", data.pending],
+      ["Confirmed", data.confirmed],
+      ["Processing", data.processing],
+      ["Shipped", data.shipped],
+      ["Delivered", data.delivered],
+      ["Cancelled", data.cancelled],
 
-  ["Partially Cancelled", data.partiallyCancelled],
+      ["Partially Cancelled", data.partiallyCancelled],
 
-  ["Return Pending", data.returnPending],
-  ["Partially Return Pending", data.partiallyReturnPending],
+      ["Return Pending", data.returnPending],
+      ["Partially Return Pending", data.partiallyReturnPending],
 
-  ["Returned", data.returned],
-  ["Partially Returned", data.partiallyReturned],
+      ["Returned", data.returned],
+      ["Partially Returned", data.partiallyReturned],
 
-  ["Return Rejected", data.returnRejected],
-  ["Partially Return Rejected", data.partiallyReturnRejected],
-];
+      ["Return Rejected", data.returnRejected],
+      ["Partially Return Rejected", data.partiallyReturnRejected],
+    ];
 
     sheet.addRows(rows);
 
@@ -280,7 +278,7 @@ sheet.addRow([
       col.width = 25;
     });
 
-    // ---------- DOWNLOAD ----------
+    //  DOWNLOAD
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

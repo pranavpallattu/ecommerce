@@ -53,14 +53,14 @@ const cartSchema = mongoose.Schema(
       default: 0,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 cartSchema.pre("save", function (next) {
   this.totalItems = this.items.length;
   this.subTotal = this.items.reduce(
     (sum, item) => sum + item.price * item.quantity,
-    0
+    0,
   );
   this.finalTotal = this.subTotal - this.discount;
   next();

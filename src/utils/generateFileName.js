@@ -13,6 +13,5 @@ const generateFileName =(productName, index) => {
   return `products/${cleanName}_${timestamp}${suffix}.webp`;
 };
 
-// module.exports=generateFileName
 
 module.exports={generateFileName}

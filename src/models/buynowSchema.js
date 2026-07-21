@@ -57,7 +57,7 @@ const buyNowSchema = new mongoose.Schema(
       index: { expires: 0 },
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 module.exports = mongoose.model("BuyNow", buyNowSchema);

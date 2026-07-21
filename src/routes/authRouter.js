@@ -9,22 +9,19 @@ const { authMiddleware } = require("../middlewares/authMiddleware");
 
 authRouter.get(
   "/google",
-  passport.authenticate("google", { scope: ["profile", "email"] })
+  passport.authenticate("google", { scope: ["profile", "email"] }),
 );
 
 authRouter.get(
   "/google/callback",
   passport.authenticate("google", { session: false }),
-  authController.googleVerifyCallback
+  authController.googleVerifyCallback,
 );
-
 
 authRouter.post("/requestotp", authController.requestAuthOtp);
 authRouter.post("/verifyotp", authController.verifyAuthOtp);
 
 authRouter.get("/me", authMiddleware, authController.getMe);
 authRouter.post("/logout", authController.logout);
-
-
 
 module.exports = authRouter;

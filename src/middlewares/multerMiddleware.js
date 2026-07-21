@@ -1,10 +1,10 @@
-const multer=require("multer")
+const multer = require("multer");
 
-const storage=multer.memoryStorage();
+const storage = multer.memoryStorage();
 
 // File filter (allow only images)
 function fileFilter(req, file, cb) {
-  const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+  const allowedTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
@@ -19,5 +19,4 @@ const upload = multer({
   fileFilter,
 });
 
-
-module.exports=upload
+module.exports = upload;

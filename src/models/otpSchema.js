@@ -9,17 +9,17 @@ const otpSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
-  attempts:{
-    type:Number,
-    default:0,
-    max:3
+  attempts: {
+    type: Number,
+    default: 0,
+    max: 3,
   },
   createdAt: {
     type: Date,
-    default:Date.now,
+    default: Date.now,
     expires: 300,
   },
 });
 
-const Otp= mongoose.model("Otp",otpSchema)
-module.exports=Otp
+const Otp = mongoose.model("Otp", otpSchema);
+module.exports = Otp;
