@@ -205,7 +205,7 @@ exports.verifyPayment = async (req, res) => {
       orderItems.push({
         productId: product._id,
         productName: product.productName, //
-        productImage: product.productImage[0] || null,
+        productImage: product.productImage[0]?.imageUrl || null,
         quantity: item.quantity,
         price: item.price,
         subtotal: item.price * item.quantity,

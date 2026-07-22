@@ -24,18 +24,18 @@ async function revalidateCoupon(cart) {
   // Coupon still valid - Calculate discount based on type (FIXED VERSION)
   let discountAmount = 0;
 
-  if (coupon.discountType === "percentage") {
-    discountAmount = (cart.subTotal * coupon.discount) / 100;
-  } else {
-    // Fixed amount discount
-    discountAmount = coupon.discount;
-  }
+if (coupon.discountType === "percentage") {
+  discountAmount = Math.round(
+    (cart.subTotal * coupon.discount) / 100
+  );
+} else {
+  discountAmount = coupon.discount;
+}
 
-  // Ensure discount doesn't exceed subtotal
-  discountAmount = Math.min(discountAmount, cart.subTotal);
+discountAmount = Math.min(discountAmount, cart.subTotal);
 
-  cart.discount = discountAmount;
-  cart.finalTotal = Math.max(cart.subTotal - (cart.discount || 0), 0);
+cart.discount = discountAmount;
+cart.finalTotal = Math.max(cart.subTotal - discountAmount, 0);
   
   return cart;
 }

@@ -14,16 +14,28 @@ require("./config/passport");
 
 const app = express();
 
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://ecommerceui-one.vercel.app",
+];
+
 app.use(
   cors({
-    origin: "https://ecommerceui-one.vercel.app",
-    // origin: "http://localhost:5173",
+    origin(origin, callback) {
+      // allow Postman/server-to-server requests (no Origin header)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      callback(new Error("Not allowed by CORS"));
+    },
     credentials: true,
     methods: ["GET", "POST", "PATCH", "DELETE", "PUT", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
-  }),
+  })
 );
-
 app.post(
   "/api/user/payment/webhook",
   express.raw({ type: "application/json" }),

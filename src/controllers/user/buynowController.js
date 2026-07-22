@@ -1,5 +1,6 @@
 const Product = require("../../models/productSchema");
 const BuyNow = require("../../models/buynowSchema");
+const revalidateCoupon = require("../../utils/revalidateCoupon");
 
 exports.createBuynow = async (req, res) => {
   try {
@@ -67,9 +68,11 @@ exports.getBuyNowCheckout = async (req, res) => {
       });
     }
 
-    res.status(200).json({
+    let validatedBuyNow = await revalidateCoupon(buyNow);
+
+    return res.status(200).json({
       success: true,
-      checkout: buyNow,
+      checkout: validatedBuyNow,
     });
   } catch (error) {
     console.error("Checkout Error:", error);

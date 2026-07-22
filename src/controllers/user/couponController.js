@@ -90,7 +90,8 @@ exports.applyCoupon = async (req, res) => {
     let discountAmount = 0;
 
     if (coupon.discountType === "percentage") {
-      discountAmount = (cart.subTotal * coupon.discount) / 100;
+      discountAmount = Math.round((cart.subTotal * coupon.discount) / 100);
+      console.log(discountAmount);
     } else {
       discountAmount = coupon.discount;
     }
@@ -117,9 +118,6 @@ exports.applyCoupon = async (req, res) => {
     }
 
     await cart.populate("appliedCoupon");
-    console.log(discountAmount);
-
-    console.log(cart);
 
     return res.status(200).json({
       success: true,
@@ -300,7 +298,7 @@ exports.buyNowApplyCoupon = async (req, res) => {
     let discountAmount = 0;
 
     if (coupon.discountType === "percentage") {
-      discountAmount = (buyNow.subTotal * coupon.discount) / 100;
+      discountAmount = Math.round(buyNow.subTotal * coupon.discount) / 100;
     } else {
       discountAmount = coupon.discount;
     }
