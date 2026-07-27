@@ -6,6 +6,9 @@ const {
 } = require("../../utils/validation");
 
 exports.addAddressController = async (req, res) => {
+  console.log(req.body.isDefault);
+  console.log(req.body);
+  
   try {
     const user = req.user;
     const {
@@ -28,6 +31,7 @@ exports.addAddressController = async (req, res) => {
       state: state.trim(),
       pincode: pincode.trim(),
       country: country.trim(),
+      deletedAt: null,
     });
 
     if (existingAddress) {
@@ -43,7 +47,10 @@ exports.addAddressController = async (req, res) => {
       return res.status(400).json({ success: false, message: error.message });
     }
 
-    const addressCount = await Address.countDocuments({ userId: user._id });
+    const addressCount = await Address.countDocuments({
+      userId: user._id,
+      deletedAt: null,
+    });
     const shouldBeDefault = addressCount === 0 ? true : isDefault;
 
     if (shouldBeDefault) {
@@ -82,15 +89,15 @@ exports.getAddressController = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const addresses = await Address.find({
-      userId,
-      deletedAt: null,
-    }).sort({
-      isDefault: -1, // default first
-      createdAt: -1, // latest next
-    });
+   const addresses = await Address.find({
+  userId,
+  deletedAt: null,
+}).sort({
+  createdAt: -1,
+});
 
-    const defaultAddress = addresses.length > 0 ? addresses[0] : null;
+const defaultAddress =
+  addresses.find((address) => address.isDefault) || null;
 
     return res.status(200).json({
       success: true,
@@ -165,6 +172,35 @@ exports.editAddressController = async (req, res) => {
       return res
         .status(404)
         .json({ success: false, message: "Address not found" });
+    }
+
+    const streetAddress =
+      req.body.streetAddress?.trim() ?? existingAddress.streetAddress;
+
+    const city = req.body.city?.trim() ?? existingAddress.city;
+
+    const state = req.body.state?.trim() ?? existingAddress.state;
+
+    const pincode = req.body.pincode?.trim() ?? existingAddress.pincode;
+
+    const country = req.body.country?.trim() ?? existingAddress.country;
+
+    const duplicateAddress = await Address.findOne({
+      _id: { $ne: id }, // Ignore current address
+      userId: user._id,
+      streetAddress,
+      city,
+      state,
+      pincode,
+      country,
+      deletedAt: null,
+    });
+
+    if (duplicateAddress) {
+      return res.status(409).json({
+        success: false,
+        message: "This address already exists in your saved addresses.",
+      });
     }
 
     // Convert isDefault string to boolean if needed

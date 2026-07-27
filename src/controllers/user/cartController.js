@@ -1,7 +1,7 @@
 const { default: mongoose } = require("mongoose");
 const Cart = require("../../models/cartSchema");
 const Product = require("../../models/productSchema");
-const revalidateCoupon = require("../../utils/revalidateCoupon");
+const refreshCheckoutCoupon = require("../../utils/refreshCheckoutCoupon");
 const calculateSubTotal = require("../../utils/calculateSubTotal");
 
 exports.addToCart = async (req, res) => {
@@ -73,7 +73,7 @@ exports.addToCart = async (req, res) => {
     cart.totalItems = cart.items.length;
     cart.subTotal = calculateSubTotal(cart.items);
 
-    cart = await revalidateCoupon(cart);
+    cart = await refreshCheckoutCoupon(cart);
 
     await cart.save();
     await cart.populate("items.product");
@@ -110,8 +110,8 @@ exports.getCart = async (req, res) => {
     }
 
     // Revalidate coupon for response only (without saving) - to not validate rest principle by saving data in a get call we are not modifying db
-    const validatedCart = await revalidateCoupon(cart);
-    validatedCart.items.reverse()
+    const validatedCart = await refreshCheckoutCoupon(cart);
+    validatedCart.items.reverse();
     return res.status(200).json({
       success: true,
       message: "Cart data is retrieved successfully",
@@ -156,7 +156,7 @@ exports.removeFromCart = async (req, res) => {
     //  Recalculate subtotal here
     cart.totalItems = cart.items.length;
     cart.subTotal = calculateSubTotal(cart.items);
-    cart = await revalidateCoupon(cart);
+    cart = await refreshCheckoutCoupon(cart);
 
     await cart.save();
     await cart.populate("items.product");
@@ -233,7 +233,7 @@ exports.updateQuantity = async (req, res) => {
     cartItem.price = product.salePrice;
 
     cart.subTotal = calculateSubTotal(cart.items);
-    cart = await revalidateCoupon(cart);
+    cart = await refreshCheckoutCoupon(cart);
 
     await cart.save();
     await cart.populate("items.product");

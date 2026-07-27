@@ -1,6 +1,6 @@
 const Product = require("../../models/productSchema");
 const BuyNow = require("../../models/buynowSchema");
-const revalidateCoupon = require("../../utils/revalidateCoupon");
+const refreshCheckoutCoupon = require("../../utils/refreshCheckoutCoupon");
 
 exports.createBuynow = async (req, res) => {
   try {
@@ -31,7 +31,7 @@ exports.createBuynow = async (req, res) => {
       product: {
         productId: product._id,
         name: product.productName,
-        image: product.productImage?.[0],
+        image: product.productImage?.[0]?.imageUrl,
         price,
       },
       quantity: 1,
@@ -68,12 +68,13 @@ exports.getBuyNowCheckout = async (req, res) => {
       });
     }
 
-    let validatedBuyNow = await revalidateCoupon(buyNow);
+   await refreshCheckoutCoupon(buyNow);
+await buyNow.save();
 
-    return res.status(200).json({
-      success: true,
-      checkout: validatedBuyNow,
-    });
+return res.json({
+    success:true,
+    checkout:buyNow
+});
   } catch (error) {
     console.error("Checkout Error:", error);
     res.status(500).json({ success: false, message: "Server error" });

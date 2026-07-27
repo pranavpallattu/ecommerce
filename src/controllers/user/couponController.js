@@ -7,7 +7,6 @@ exports.applyCoupon = async (req, res) => {
   try {
     const user = req.user;
     const { code } = req.body;
-    console.log(code);
 
     if (!code || typeof code !== "string" || code.trim().length === 0) {
       return res.status(400).json({
@@ -91,7 +90,6 @@ exports.applyCoupon = async (req, res) => {
 
     if (coupon.discountType === "percentage") {
       discountAmount = Math.round((cart.subTotal * coupon.discount) / 100);
-      console.log(discountAmount);
     } else {
       discountAmount = coupon.discount;
     }
@@ -217,8 +215,6 @@ exports.buyNowApplyCoupon = async (req, res) => {
     const { code } = req.body;
     const { buyNowId } = req.params;
 
-    console.log(code);
-
     if (!code || typeof code !== "string" || code.trim().length === 0) {
       return res.status(400).json({
         success: false,
@@ -325,9 +321,6 @@ exports.buyNowApplyCoupon = async (req, res) => {
     }
 
     await buyNow.populate("appliedCoupon");
-    console.log(discountAmount);
-
-    console.log(buyNow);
 
     return res.status(200).json({
       success: true,

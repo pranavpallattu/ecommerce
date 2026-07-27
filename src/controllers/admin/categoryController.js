@@ -201,7 +201,7 @@ exports.getCategoriesController = async (req, res) => {
     const [totalCategories, categories] = await Promise.all([
       Category.countDocuments(searchQuery),
       Category.find(searchQuery)
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: -1,_id:-1 })
         .skip(skip)
         .limit(limit),
     ]);

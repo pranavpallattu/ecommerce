@@ -459,11 +459,14 @@ exports.softDeleteProduct = async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id))
       return res.status(400).json({ message: "Invalid product id" });
 
-    const updated = await Product.findByIdAndUpdate(
-      id,
-      { deletedAt: new Date() },
-      { new: true },
-    );
+   const updated = await Product.findByIdAndUpdate(
+  id,
+  {
+    deletedAt: new Date(),
+    isActive: false,
+  },
+  { new: true }
+);
     if (!updated) return res.status(404).json({ message: "Product not found" });
     return res.json({
       success: true,

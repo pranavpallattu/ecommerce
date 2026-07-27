@@ -18,7 +18,6 @@ const cookieOptions = {
 exports.googleVerifyCallback = async (req, res) => {
   try {
     const user = req.user;
-    console.log(user);
 
     if (user.isBlocked) {
       return res.status(403).json({ message: "Account blocked" });
@@ -157,7 +156,6 @@ exports.verifyAuthOtp = async (req, res) => {
     const normalizedEmail = emailId.toLowerCase().trim();
 
     const existingOtp = await Otp.findOne({ emailId: normalizedEmail });
-    console.log(existingOtp);
 
     if (!existingOtp) {
       return res.status(401).json({

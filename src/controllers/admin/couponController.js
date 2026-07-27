@@ -26,7 +26,7 @@ exports.getCouponController = async (req, res) => {
 
     const [totalCoupons, coupons] = await Promise.all([
       Coupon.countDocuments(searchQuery),
-      Coupon.find(searchQuery).sort({ createdAt: -1 }).skip(skip).limit(limit),
+      Coupon.find(searchQuery).sort({ createdAt: -1,_id:-1 }).skip(skip).limit(limit),
     ]);
 
     const totalPages = Math.ceil(totalCoupons / limit);

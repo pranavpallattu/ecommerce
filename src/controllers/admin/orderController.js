@@ -5,6 +5,7 @@ const User = require("../../models/userSchema");
 const Wallet = require("../../models/walletSchema");
 const crypto = require("crypto");
 const sendSMS = require("../../config/twiliosms");
+const { roundMoney } = require("../../utils/currency");
 
 exports.listOrders = async (req, res) => {
   try {
@@ -294,12 +295,17 @@ exports.orderStatus = async (req, res) => {
         order.paymentStatus = "N/A";
         refundAmount = 0;
       } else {
-        const totalPreviousRefunds = order.refunds
-          .filter((r) => r.status === "Processed")
-          .reduce((sum, r) => sum + r.amount, 0);
+        const totalPreviousRefunds = roundMoney(
+          order.refunds
+            .filter((r) => r.status === "Processed")
+            .reduce((sum, r) => sum + r.amount, 0),
+        );
 
-        const maxRefundable = order.grandTotal - totalPreviousRefunds;
-        refundAmount = Math.min(order.grandTotal, maxRefundable);
+        const maxRefundable = roundMoney(
+          order.grandTotal - totalPreviousRefunds,
+        );
+
+        refundAmount = roundMoney(Math.min(order.grandTotal, maxRefundable));
 
         if (refundAmount <= 0) {
           await session.abortTransaction();
@@ -336,6 +342,7 @@ exports.orderStatus = async (req, res) => {
           refundRecord = {
             refundId: `refund_${crypto.randomUUID()}`,
             amount: refundAmount,
+            reason: order.cancellationReason || "Admin cancelled order",
             itemIds: order.items.map((i) => i._id),
             status: "Processed",
           };
@@ -347,7 +354,8 @@ exports.orderStatus = async (req, res) => {
       }
 
       order.orderStatus = "Cancelled";
-      order.cancelledAt = new Date();
+      ((order.cancellationReason = "Admin cancelled order"),
+        (order.cancelledAt = new Date()));
     }
 
     // save
@@ -388,7 +396,7 @@ exports.orderStatus = async (req, res) => {
         orderStatus: order.orderStatus,
         paymentStatus: order.paymentStatus,
         deliveredAt: order.deliveredAt || null,
-        refundAmount: refundAmount > 0 ? Number(refundAmount.toFixed(2)) : null,
+        refundAmount: refundAmount > 0 ? roundMoney(refundAmount) : null,
         refundedTo: refundAmount > 0 ? "wallet" : null,
         refundId: refundRecord?.refundId || null,
       },
@@ -505,17 +513,19 @@ exports.orderReturnApprove = async (req, res) => {
     }
 
     // calculate totalRefunded before refund
-    const totalProcessed = order.refunds
-      .filter((refundRecord) => refundRecord.status === "Processed")
-      .reduce((sum, refundRecord) => sum + refundRecord.amount, 0);
+    const totalProcessed = roundMoney(
+      order.refunds
+        .filter((refundRecord) => refundRecord.status === "Processed")
+        .reduce((sum, refundRecord) => sum + refundRecord.amount, 0),
+    );
 
     // maximum refundable amount
-    const maxRefundableAmount = order.grandTotal - totalProcessed;
+    const maxRefundableAmount = roundMoney(order.grandTotal - totalProcessed);
 
     let refundAmount = 0;
     let refundRecord = null;
 
-    refundAmount = Math.min(maxRefundableAmount, order.grandTotal);
+    refundAmount = roundMoney(Math.min(maxRefundableAmount, order.grandTotal));
 
     if (refundAmount <= 0) {
       await session.abortTransaction();
@@ -562,10 +572,12 @@ exports.orderReturnApprove = async (req, res) => {
     order.refunds.push(refundRecord);
 
     // update payment status after refund
-    const totalPaid = order.grandTotal;
-    const totalRefunded = order.refunds
-      .filter((r) => r.status === "Processed")
-      .reduce((sum, r) => sum + r.amount, 0);
+    const totalPaid = roundMoney(order.grandTotal);
+    const totalRefunded = roundMoney(
+      order.refunds
+        .filter((r) => r.status === "Processed")
+        .reduce((sum, r) => sum + r.amount, 0),
+    );
 
     if (order.paymentMethod === "cod") {
       order.paymentStatus = "Refunded";
@@ -650,6 +662,7 @@ exports.orderReturnReject = async (req, res) => {
     }
 
     order.orderStatus = "ReturnRejected";
+    order.returnRejectedAt = new Date();
 
     const invalidItem = order.items.find(
       (item) => item.itemStatus !== "ReturnPending",
@@ -756,6 +769,7 @@ exports.itemReturnReject = async (req, res) => {
     // update item status
 
     item.itemStatus = "ReturnRejected";
+    item.returnRejectedAt = new Date();
 
     const pendingCount = order.items.filter(
       (i) => i.itemStatus === "ReturnPending",
@@ -885,9 +899,9 @@ exports.itemReturnApprove = async (req, res) => {
     // - After you save the order, pre-save hook recalculates totals
     // - You need original values to calculate correct refund amount
     // - Without this, refund calculations would be wrong
-    const originalSubTotal = Number(order.subTotal);
-    const originalGrandTotal = Number(order.grandTotal);
-    const originalDiscount = Number(order.discount);
+    const originalSubTotal = roundMoney(order.subTotal);
+    const originalGrandTotal = roundMoney(order.grandTotal);
+    const originalDiscount = roundMoney(order.discount);
 
     item.itemStatus = "Returned";
     item.returnApprovedAt = new Date();
@@ -926,39 +940,45 @@ exports.itemReturnApprove = async (req, res) => {
         pendingCount === totalCount
           ? "ReturnPending"
           : "PartiallyReturnPending";
-    } else if (returnedCount === totalCount) {
-      order.orderStatus = "Returned";
-      order.returnedAt = new Date();
-
-      if (!order.returnReason) {
-        order.returnReason = "All items returned and approved";
-      }
-    } else if (rejectedCount === totalCount) {
-      order.orderStatus = "ReturnRejected";
-    } else if (returnedCount > 0 && rejectedCount > 0) {
-      order.orderStatus = "PartiallyReturnRejected";
     } else if (returnedCount > 0) {
-      order.orderStatus = "PartiallyReturned";
+      order.orderStatus =
+        returnedCount === totalCount ? "Returned" : "PartiallyReturned";
+
+      if (returnedCount === totalCount) {
+        order.returnedAt = new Date();
+
+        if (!order.returnReason) {
+          order.returnReason = "All items returned and approved";
+        }
+      }
     } else if (rejectedCount > 0) {
-      order.orderStatus = "PartiallyReturnRejected";
+      order.orderStatus =
+        rejectedCount === totalCount
+          ? "ReturnRejected"
+          : "PartiallyReturnRejected";
     } else {
       order.orderStatus = "Delivered";
     }
 
     // Calculate max refundable
     // PRORATE DISCOUNT
-    const itemRatio = item.subtotal / originalSubTotal;
+    const itemRatio =
+      originalSubTotal > 0 ? item.subtotal / originalSubTotal : 0;
     const proratedDiscount = itemRatio * originalDiscount;
-    const itemRefundAmount = Math.max(0, item.subtotal - proratedDiscount);
+    const itemRefundAmount = roundMoney(
+      Math.max(0, item.subtotal - proratedDiscount),
+    );
 
     // CAP REFUND
-    const totalProcessed = order.refunds
-      .filter((refundRecord) => refundRecord.status === "Processed")
-      .reduce((sum, refundRecord) => sum + refundRecord.amount, 0);
+    const totalProcessed = roundMoney(
+      order.refunds
+        .filter((refundRecord) => refundRecord.status === "Processed")
+        .reduce((sum, refundRecord) => sum + refundRecord.amount, 0),
+    );
 
-    const maxRefundable = originalGrandTotal - totalProcessed;
+    const maxRefundable = roundMoney(originalGrandTotal - totalProcessed);
 
-    actualRefundAmount = Math.min(itemRefundAmount, maxRefundable);
+    actualRefundAmount = roundMoney(Math.min(itemRefundAmount, maxRefundable));
 
     // ONLINE / WALLET PAYMENT
     if (actualRefundAmount > 0) {
@@ -1000,9 +1020,11 @@ exports.itemReturnApprove = async (req, res) => {
     if (refundRecord) {
       order.refunds.push(refundRecord);
     }
-    const totalRefunded = order.refunds
-      .filter((r) => r.status === "Processed")
-      .reduce((sum, r) => sum + r.amount, 0);
+    const totalRefunded = roundMoney(
+      order.refunds
+        .filter((r) => r.status === "Processed")
+        .reduce((sum, r) => sum + r.amount, 0),
+    );
 
     if (totalRefunded >= originalGrandTotal) {
       order.paymentStatus = "Refunded";
@@ -1037,8 +1059,7 @@ exports.itemReturnApprove = async (req, res) => {
         orderStatus: order.orderStatus,
         paymentStatus: order.paymentStatus,
         deliveredAt: order.deliveredAt || null,
-        refundAmount:
-          actualRefundAmount > 0 ? Number(actualRefundAmount.toFixed(2)) : null,
+        refundAmount: actualRefundAmount,
         refundedTo: actualRefundAmount > 0 ? "wallet" : null,
       },
     });
@@ -1055,6 +1076,48 @@ exports.itemReturnApprove = async (req, res) => {
     await session.endSession();
   }
 };
+
+// Returned + Rejected + Delivered → PartiallyReturned
+// Only Rejected + Delivered → PartiallyReturnRejected
+// All Returned → Returned
+// All Rejected → ReturnRejected
+// Any pending return → ReturnPending or PartiallyReturnPending
+
+// Pending return exists?
+//         ↓
+// ReturnPending / PartiallyReturnPending
+
+// Else any successful return?
+//         ↓
+// Returned / PartiallyReturned
+
+// Else any rejected return?
+//         ↓
+// ReturnRejected / PartiallyReturnRejected
+
+// Else
+//         ↓
+// Delivered
+
+// Item Statuses	                                      Order Status
+// Delivered, Delivered            	                  ✅ Delivered
+// ReturnPending, Delivered	                          ✅ PartiallyReturnPending
+// ReturnPending, ReturnPending	                      ✅ ReturnPending
+// Returned, Delivered                              	✅ PartiallyReturned
+// Returned, Returned	                                ✅ Returned
+// ReturnRejected, Delivered	                        ✅ PartiallyReturnRejected
+// ReturnRejected, ReturnRejected                   	✅ ReturnRejected
+// Returned, ReturnRejected, Delivered              	✅ PartiallyReturned
+// Returned, Returned, ReturnRejected                	✅ PartiallyReturned
+// Returned, ReturnPending, ReturnRejected          	✅ PartiallyReturnPending
+
+// Notice the last three:
+
+// Pending always has the highest priority because an admin action is still pending.
+// If there is no pending request, but at least one successful return, the order is shown as Returned/PartiallyReturned.
+// Only if there are no pending requests and no successful returns do you show ReturnRejected/PartiallyReturnRejected.
+
+// This is a sensible production-ready precedence because a successful return is generally considered more significant than a rejected request when summarizing the overall order state.
 
 exports.getReturnPendingRequests = async (req, res) => {
   try {
@@ -1110,3 +1173,28 @@ exports.getReturnPendingRequests = async (req, res) => {
     });
   }
 };
+
+
+// Delivered Order
+//         │
+//         ▼
+// Any ReturnPending?
+//         │
+//    ┌────┴─────┐
+//   Yes        No
+//    │          │
+// ReturnPending? │
+// (All?)         ▼
+//             Any Returned?
+//                 │
+//          ┌──────┴──────┐
+//         Yes            No
+//          │              │
+//  Returned?             Any Rejected?
+//  (All?)                 │
+//          │        ┌─────┴─────┐
+//          ▼       Yes         No
+//  Returned /     │            │
+// PartiallyReturned ▼          ▼
+//           ReturnRejected   Delivered
+//           /PartiallyReturnRejected

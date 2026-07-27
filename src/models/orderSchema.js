@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { roundMoney } = require("../utils/currency");
 
 const FULFILLMENT_STATUSES = [
   "Pending",
@@ -162,7 +163,12 @@ const orderSchema = new mongoose.Schema(
 
     deliveredAt: { type: Date, default: null },
     cancelledAt: { type: Date, default: null },
-    returnedAt: { type: Date, default: null },
+    // returnedAt: { type: Date, default: null },
+
+    returnRequestedAt: { type: Date, default: null },
+returnedAt: { type: Date, default: null },
+returnRejectedAt: { type: Date, default: null },
+
     cancellationReason: { type: String, default: null },
     returnReason: { type: String, default: null },
   },
@@ -171,13 +177,16 @@ const orderSchema = new mongoose.Schema(
 
 orderSchema.pre("save", function (next) {
   this.items.forEach((item) => {
-    if (!item.subtotal) {
-      item.subtotal = item.price * item.quantity;
-    }
+    item.subtotal = roundMoney(item.price * item.quantity);
   });
 
-  this.subTotal = this.items.reduce((sum, i) => sum + i.subtotal, 0);
-  this.grandTotal = Math.max(0, this.subTotal - this.discount);
+  this.subTotal = roundMoney(
+    this.items.reduce((sum, i) => sum + i.subtotal, 0),
+  );
+
+  this.discount = roundMoney(this.discount);
+
+  this.grandTotal = roundMoney(Math.max(0, this.subTotal - this.discount));
 
   next();
 });

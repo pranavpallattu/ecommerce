@@ -8,6 +8,8 @@ const crypto = require("crypto");
 const BuyNow = require("../../models/buynowSchema");
 const { createInvoiceIfNeeded } = require("./invoiceController");
 const getOrderDateRange = require("../../utils/getOrderDateRange");
+const { roundMoney } = require("../../utils/currency");
+const refreshCheckoutCoupon = require("../../utils/refreshCheckoutCoupon");
 
 const ORDER_CANCELLABLE_STATUSES = ["Pending", "Confirmed", "Processing"];
 
@@ -71,9 +73,8 @@ exports.placeOrder = async (req, res) => {
       });
     }
 
-    const subTotal = cart.items.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0,
+    const subTotal = roundMoney(
+      cart.items.reduce((sum, item) => sum + item.price * item.quantity, 0),
     );
     let discount = 0;
     let validCouponId = null;
@@ -133,9 +134,9 @@ exports.placeOrder = async (req, res) => {
 
       // Calculate discount
       if (coupon.discountType === "percentage") {
-        discount = (subTotal * coupon.discount) / 100;
+        discount = roundMoney((subTotal * coupon.discount) / 100);
       } else if (coupon.discountType === "flat") {
-        discount = coupon.discount;
+        discount = roundMoney(coupon.discount);
       }
 
       // Ensure discount doesn't exceed subtotal
@@ -145,7 +146,7 @@ exports.placeOrder = async (req, res) => {
       validCouponCode = coupon.code;
     }
 
-    const grandTotal = subTotal - discount;
+    const grandTotal = roundMoney(subTotal - discount);
 
     let walletUsed = 0;
 
@@ -161,7 +162,7 @@ exports.placeOrder = async (req, res) => {
           message: "Insufficient wallet balance",
         });
       }
-      wallet.balance -= grandTotal;
+      wallet.balance = roundMoney(wallet.balance - grandTotal);
       walletUsed = grandTotal;
       wallet.transactionHistory.push({
         type: "debit",
@@ -211,7 +212,7 @@ exports.placeOrder = async (req, res) => {
         productImage: item.productImage,
         quantity: item.quantity,
         price: item.price,
-        subtotal: item.price * item.quantity,
+        subtotal: roundMoney(item.price * item.quantity),
         itemStatus: "Confirmed",
       })),
       address: {
@@ -325,51 +326,19 @@ exports.placeBuyNowOrder = async (req, res) => {
       });
     }
 
-    if (buyNow.appliedCoupon) {
-      const coupon = await Coupon.findById(buyNow.appliedCoupon).session(
-        session,
-      );
+    await refreshCheckoutCoupon(buyNow);
 
-      if (!coupon) {
-        await session.abortTransaction();
+    await buyNow.save({
+      session,
+    });
 
-        return res.status(400).json({
-          success: false,
-          message: "Coupon no longer exists",
-        });
-      }
+    const subTotal = buyNow.subTotal;
 
-      if (!coupon.isActive) {
-        await session.abortTransaction();
+    const discount = buyNow.discount;
 
-        return res.status(400).json({
-          success: false,
-          message: "Coupon is inactive",
-        });
-      }
-      if (coupon.expiryDate < new Date()) {
-        await session.abortTransaction();
-
-        return res.status(400).json({
-          success: false,
-          message: "Coupon has expired",
-        });
-      }
-
-      if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
-        await session.abortTransaction();
-
-        return res.status(400).json({
-          success: false,
-          message: "Coupon usage limit exceeded",
-        });
-      }
-    }
+    const grandTotal = buyNow.finalTotal;
 
     const quantity = buyNow.quantity;
-    const subTotal = buyNow.subTotal;
-    const discount = buyNow.discount || 0;
-    const grandTotal = buyNow.finalTotal;
 
     // Wallet payment
     let walletUsed = 0;
@@ -385,7 +354,7 @@ exports.placeBuyNowOrder = async (req, res) => {
         });
       }
 
-      wallet.balance -= grandTotal;
+      wallet.balance = roundMoney(wallet.balance - grandTotal);
       walletUsed = grandTotal;
 
       wallet.transactionHistory.push({
@@ -398,6 +367,26 @@ exports.placeBuyNowOrder = async (req, res) => {
     }
 
     const product = buyNow.product.productId;
+
+    // Product existence check
+    if (!product) {
+      await session.abortTransaction();
+
+      return res.status(404).json({
+        success: false,
+        message: "Product no longer exists",
+      });
+    }
+
+    // Product availability check
+    if (!product.isActive || product.deletedAt) {
+      await session.abortTransaction();
+
+      return res.status(400).json({
+        success: false,
+        message: "Product is no longer available",
+      });
+    }
 
     // Stock check
     if (product.quantity < quantity) {
@@ -434,7 +423,7 @@ exports.placeBuyNowOrder = async (req, res) => {
       checkoutType: "buyNow",
       subTotal,
       couponId: buyNow.appliedCoupon?._id || null,
-      couponCode: buyNow.appliedCoupon?.code || null, 
+      couponCode: buyNow.appliedCoupon?.code || null,
       discount,
       grandTotal,
       walletAmountUsed: walletUsed,
@@ -444,23 +433,34 @@ exports.placeBuyNowOrder = async (req, res) => {
     });
 
     await order.save({ session });
-
     if (buyNow.appliedCoupon) {
-      await Coupon.findByIdAndUpdate(
-        buyNow.appliedCoupon._id,
-        { $inc: { usedCount: 1 } },
-        { session },
-      );
-
-      if (!user.usedCoupons) {
-        user.usedCoupons = [];
-      }
-
       user.usedCoupons.push(buyNow.appliedCoupon._id);
-
       await user.save({ session });
     }
+    if (buyNow.appliedCoupon) {
+      const updatedCoupon = await Coupon.findOneAndUpdate(
+        {
+          _id: buyNow.appliedCoupon._id,
+          usedCount: { $lt: buyNow.appliedCoupon.usageLimit },
+        },
+        {
+          $inc: { usedCount: 1 },
+        },
+        {
+          new: true,
+          session,
+        },
+      );
 
+      if (!updatedCoupon) {
+        await session.abortTransaction();
+
+        return res.status(409).json({
+          success: false,
+          message: "Coupon has reached its usage limit",
+        });
+      }
+    }
     //  BuyNow session completed
     await BuyNow.findByIdAndUpdate(
       buyNowId,
@@ -519,7 +519,10 @@ exports.getUserOrders = async (req, res) => {
     if (time) {
       // dateConditions array with functions date query return values
       // filter(Boolean) → Removes all falsy values (null, undefined, false, 0, "", NaN) and keeps only truthy values. remove any null values returned by getOrderDateRange().
-      const dateConditions = time.split(",").map(getOrderDateRange).filter(Boolean);
+      const dateConditions = time
+        .split(",")
+        .map(getOrderDateRange)
+        .filter(Boolean);
       if (dateConditions.length) {
         // $or Return documents that satisfy any one of these conditions.
         query.$or = dateConditions;
@@ -575,17 +578,41 @@ exports.getSingleOrder = async (req, res) => {
         message: "Invalid order ID",
       });
     }
-
-    // find order
-    const order = await Order.findOne({ _id: orderId, userId: user._id })
+    const order = await Order.findOne({
+      _id: orderId,
+      userId: user._id,
+    })
       .populate("items.productId")
       .lean();
 
     if (!order) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Order not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
     }
+
+    // Add product details for each refund
+    order.refunds = order.refunds.map((refund) => ({
+      ...refund,
+      products: refund.itemIds
+        .map((itemId) => {
+          const item = order.items.find(
+            (i) => i._id.toString() === itemId.toString(),
+          );
+
+          return item
+            ? {
+                itemId: item._id,
+                productId: item.productId._id,
+                productName: item.productName,
+                quantity: item.quantity,
+                subtotal: item.subtotal,
+              }
+            : null;
+        })
+        .filter(Boolean),
+    }));
 
     return res.status(200).json({
       success: true,
@@ -730,12 +757,13 @@ exports.orderCancel = async (req, res) => {
     );
 
     // maxrefundable amount for safety to prevent double refund money
-    const totalProcessed = order.refunds
-      .filter((r) => r.status === "Processed")
-      .reduce((sum, r) => sum + r.amount, 0);
+    const totalProcessed = roundMoney(
+      order.refunds
+        .filter((r) => r.status === "Processed")
+        .reduce((sum, r) => sum + r.amount, 0),
+    );
 
-    const maxRefundable = order.grandTotal - totalProcessed;
-
+    const maxRefundable = roundMoney(order.grandTotal - totalProcessed);
     let refundAmount = 0;
     let refundRecord = null;
 
@@ -743,7 +771,7 @@ exports.orderCancel = async (req, res) => {
       refundAmount = 0;
       order.paymentStatus = "N/A";
     } else {
-      refundAmount = Math.min(maxRefundable, order.grandTotal);
+      refundAmount = roundMoney(Math.min(maxRefundable, order.grandTotal));
 
       if (refundAmount <= 0) {
         await session.abortTransaction();
@@ -790,9 +818,11 @@ exports.orderCancel = async (req, res) => {
     }
 
     const totalPaid = order.grandTotal;
-    const totalRefunded = order.refunds
-      .filter((r) => r.status === "Processed")
-      .reduce((sum, r) => sum + r.amount, 0);
+    const totalRefunded = roundMoney(
+      order.refunds
+        .filter((r) => r.status === "Processed")
+        .reduce((sum, r) => sum + r.amount, 0),
+    );
 
     if (totalRefunded >= totalPaid) {
       order.paymentStatus = "Refunded";
@@ -812,7 +842,7 @@ exports.orderCancel = async (req, res) => {
       message: "Order cancelled successfully",
       data: {
         orderId: order._id,
-        refundAmount: refundAmount > 0 ? Number(refundAmount.toFixed(2)) : null,
+        refundAmount: refundAmount,
         refundedTo: refundAmount > 0 ? "wallet" : null,
         refundId: refundRecord?.refundId || null,
         paymentStatus: order.paymentStatus,
@@ -948,8 +978,7 @@ exports.cancelSingleItem = async (req, res) => {
     await product.save({ session });
 
     //Check Coupon Validity (Before Save)
-    const newSubTotal = originalSubTotal - item.subtotal;
-
+    const newSubTotal = roundMoney(originalSubTotal - item.subtotal);
     //If remaining items no longer meet coupon minimum purchase amount, remove coupon
     if (order.couponId) {
       const coupon = await Coupon.findById(order.couponId).session(session);
@@ -979,18 +1008,20 @@ exports.cancelSingleItem = async (req, res) => {
 
     // PRORATE DISCOUNT
     const itemRatio = item.subtotal / originalSubTotal;
-    const proratedDiscount = itemRatio * originalDiscount;
-    const itemRefundAmount = Math.max(0, item.subtotal - proratedDiscount);
-
+    const proratedDiscount = roundMoney(itemRatio * originalDiscount);
+    const itemRefundAmount = roundMoney(item.subtotal - proratedDiscount);
     // CAP REFUND
-    const totalProcessed = order.refunds
-      .filter((refundRecord) => refundRecord.status === "Processed")
-      .reduce((sum, refundRecord) => sum + refundRecord.amount, 0);
+    const totalProcessed = roundMoney(
+      order.refunds
+        .filter((r) => r.status === "Processed")
+        .reduce((sum, r) => sum + r.amount, 0),
+    );
 
-    const maxRefundable = originalGrandTotal - totalProcessed;
+    const maxRefundable = roundMoney(originalGrandTotal - totalProcessed);
 
-    const actualRefundAmount = Math.min(itemRefundAmount, maxRefundable);
-
+    const actualRefundAmount = roundMoney(
+      Math.min(itemRefundAmount, maxRefundable),
+    );
     let refundRecord = null;
 
     // Refund cod
@@ -1047,9 +1078,11 @@ exports.cancelSingleItem = async (req, res) => {
 
     // update payment status
     if (order.paymentMethod !== "cod") {
-      const totalRefunded = order.refunds
-        .filter((r) => r.status === "Processed")
-        .reduce((sum, r) => sum + r.amount, 0);
+      const totalRefunded = roundMoney(
+        order.refunds
+          .filter((r) => r.status === "Processed")
+          .reduce((sum, r) => sum + r.amount, 0),
+      );
 
       if (totalRefunded >= originalGrandTotal) {
         order.paymentStatus = "Refunded";
@@ -1080,9 +1113,7 @@ exports.cancelSingleItem = async (req, res) => {
           price: item.price,
           subtotal: item.subtotal,
         },
-        refundAmount: refundRecord
-          ? Number(refundRecord.amount.toFixed(2))
-          : null,
+        refundAmount: refundRecord?.amount ?? null,
         refundedTo: refundRecord ? "wallet" : null,
         refundId: refundRecord?.refundId || null,
       },

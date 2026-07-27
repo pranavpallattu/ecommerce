@@ -18,7 +18,7 @@ exports.getHomeProductsController = async (req, res) => {
           .select(
             "_id productName productImage salePrice regularPrice quantity",
           )
-          .limit(3);
+          .limit(4);
 
         if (products.length === 0) return null;
 
@@ -65,10 +65,14 @@ exports.getShopProductsController = async (req, res) => {
 
     // Search filter
     if (search) {
-      filters.$or = [
-        { productName: { $regex: search, $options: "i" } },
-        { description: { $regex: search, $options: "i" } },
-      ];
+      const words = search.trim().split(/\s+/);
+
+      filters.$and = words.map((word) => ({
+        $or: [
+          { productName: { $regex: word, $options: "i" } },
+          { description: { $regex: word, $options: "i" } },
+        ],
+      }));
     }
 
     let sortQuery = {};

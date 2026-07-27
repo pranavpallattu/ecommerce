@@ -8,6 +8,7 @@ const Wallet = require("../../models/walletSchema");
 const Coupon = require("../../models/couponSchema");
 const BuyNow = require("../../models/buynowSchema");
 const { createInvoiceIfNeeded } = require("./invoiceController");
+const { roundMoney } = require("../../utils/currency");
 
 exports.createOrder = async (req, res) => {
   try {
@@ -24,7 +25,7 @@ exports.createOrder = async (req, res) => {
     const order = await razorpayInstance.orders.create({
       amount: Math.round(amount * 100),
       currency: "INR",
-      receipt: `receipt_${_id}}`,
+      receipt: `receipt_${_id}`,
       notes: {
         name,
         emailId,
@@ -54,8 +55,6 @@ exports.verifyPayment = async (req, res) => {
       razorpay_signature,
       orderDetails,
     } = req.body;
-
-    console.log(orderDetails);
 
     const user = req.user;
 
@@ -101,9 +100,8 @@ exports.verifyPayment = async (req, res) => {
 
     // validate sub total
 
-    const calculatedSubTotal = cart.items.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0,
+    const calculatedSubTotal = roundMoney(
+      cart.items.reduce((sum, item) => sum + item.price * item.quantity, 0),
     );
     let expectedDiscount = 0;
 
@@ -157,17 +155,20 @@ exports.verifyPayment = async (req, res) => {
         });
       }
 
-      if (coupon.discountType == "percentage") {
-        expectedDiscount = (calculatedSubTotal * coupon.discount) / 100;
-      } else if (coupon.discountType == "flat") {
-        expectedDiscount = coupon.discount;
+      if (coupon.discountType === "percentage") {
+        expectedDiscount = roundMoney(
+          (calculatedSubTotal * coupon.discount) / 100,
+        );
+      } else if (coupon.discountType === "flat") {
+        expectedDiscount = roundMoney(coupon.discount);
       }
 
       expectedDiscount = Math.min(expectedDiscount, calculatedSubTotal);
     }
 
-    const expectedGrandTotal = calculatedSubTotal - expectedDiscount;
-
+    const expectedGrandTotal = roundMoney(
+      calculatedSubTotal - expectedDiscount,
+    );
     // Validate amounts
     if (
       calculatedSubTotal !== orderDetails?.subTotal ||
@@ -187,6 +188,25 @@ exports.verifyPayment = async (req, res) => {
 
     for (const item of cart.items) {
       const product = await Product.findById(item.product).session(session);
+
+      if (!product) {
+        await session.abortTransaction();
+
+        return res.status(404).json({
+          success: false,
+          message: "Product no longer exists",
+        });
+      }
+
+      // Product availability check
+      if (!product.isActive || product.deletedAt) {
+        await session.abortTransaction();
+
+        return res.status(400).json({
+          success: false,
+          message: "Product is no longer available",
+        });
+      }
 
       if (!product || product.quantity < item.quantity) {
         await session.abortTransaction();
@@ -208,7 +228,7 @@ exports.verifyPayment = async (req, res) => {
         productImage: product.productImage[0]?.imageUrl || null,
         quantity: item.quantity,
         price: item.price,
-        subtotal: item.price * item.quantity,
+        subtotal: roundMoney(item.price * item.quantity),
         itemStatus: "Confirmed",
       });
     }
@@ -255,8 +275,11 @@ exports.verifyPayment = async (req, res) => {
 
     await Cart.deleteOne({ userId: user._id }).session(session);
     await session.commitTransaction();
-    await createInvoiceIfNeeded(order._id);
-
+    try {
+      await createInvoiceIfNeeded(order._id);
+    } catch (err) {
+      console.error("Invoice generation failed:", err.message);
+    }
     return res.status(200).json({
       success: true,
       message: "Payment verified & order saved",
@@ -298,7 +321,7 @@ exports.createBuyNowOrder = async (req, res) => {
     const amount = buyNow.finalTotal;
 
     const order = await razorpayInstance.orders.create({
-      amount: amount * 100,
+      amount: Math.round(amount * 100),
       currency: "INR",
       receipt: `buynow_${buyNowId}`,
       notes: {
@@ -323,8 +346,6 @@ exports.verifyBuyNowPayment = async (req, res) => {
   await session.startTransaction();
 
   try {
-    console.log("verify buy now called");
-
     const {
       razorpay_order_id,
       razorpay_payment_id,
@@ -384,8 +405,6 @@ exports.verifyBuyNowPayment = async (req, res) => {
     }
     const product = buyNow.product.productId;
     const quantity = buyNow.quantity;
-    const subTotal = buyNow.subTotal;
-    const grandTotal = buyNow.finalTotal;
 
     if (buyNow.appliedCoupon) {
       const coupon = buyNow.appliedCoupon;
@@ -427,15 +446,24 @@ exports.verifyBuyNowPayment = async (req, res) => {
       }
     }
 
+    //     console.log({
+    //   productPrice: product.price,
+    //   buyNowProductPrice: buyNow.product.price,
+    //   quantity,
+    //   couponDiscount: buyNow.appliedCoupon?.discount,
+    //   discountType: buyNow.appliedCoupon?.discountType,
+    // });
+
     let expectedDiscount = 0;
 
     if (buyNow.appliedCoupon) {
       if (buyNow.appliedCoupon.discountType === "percentage") {
-        expectedDiscount =
+        expectedDiscount = roundMoney(
           (buyNow.product.price * quantity * buyNow.appliedCoupon.discount) /
-          100;
+            100,
+        );
       } else {
-        expectedDiscount = buyNow.appliedCoupon.discount;
+        expectedDiscount = roundMoney(buyNow.appliedCoupon.discount);
       }
 
       expectedDiscount = Math.min(
@@ -444,13 +472,23 @@ exports.verifyBuyNowPayment = async (req, res) => {
       );
     }
 
-    const expectedSubTotal = buyNow.product.price * quantity;
-    const expectedGrandTotal = expectedSubTotal - expectedDiscount;
+    const expectedSubTotal = roundMoney(buyNow.product.price * quantity);
+    const expectedGrandTotal = roundMoney(expectedSubTotal - expectedDiscount);
 
+    //     console.log({
+    //   expectedSubTotal,
+    //   buyNowSubTotal: buyNow.subTotal,
+
+    //   expectedDiscount,
+    //   buyNowDiscount: buyNow.discount,
+
+    //   expectedGrandTotal,
+    //   buyNowGrandTotal: buyNow.finalTotal,
+    // });
     if (
-      expectedSubTotal !== buyNow.subTotal ||
-      expectedDiscount !== buyNow.discount ||
-      expectedGrandTotal !== buyNow.finalTotal
+      expectedSubTotal !== roundMoney(buyNow.subTotal) ||
+      expectedDiscount !== roundMoney(buyNow.discount) ||
+      expectedGrandTotal !== roundMoney(buyNow.finalTotal)
     ) {
       await session.abortTransaction();
 
@@ -480,21 +518,21 @@ exports.verifyBuyNowPayment = async (req, res) => {
       items: [
         {
           productId: product._id,
-          productName: buyNow.product.name,
-          productImage: buyNow.product.image,
+          productName: product.productName,
+          productImage: product.productImage?.[0]?.imageUrl || null,
           quantity,
           price: buyNow.product.price,
-          subtotal: subTotal,
+          subtotal: roundMoney(buyNow.product.price * quantity),
           itemStatus: "Confirmed",
         },
       ],
       address,
       checkoutType: "buyNow",
-      subTotal,
-      discount: buyNow.discount || 0,
       couponId: buyNow.appliedCoupon?._id || null,
       couponCode: buyNow.appliedCoupon?.code || null,
-      grandTotal,
+      subTotal: expectedSubTotal,
+      discount: expectedDiscount,
+      grandTotal: expectedGrandTotal,
       paymentMethod: "razorpay",
       razorpayOrderId: razorpay_order_id,
       razorpayPaymentId: razorpay_payment_id,
@@ -526,8 +564,11 @@ exports.verifyBuyNowPayment = async (req, res) => {
 
     await session.commitTransaction();
 
-    await createInvoiceIfNeeded(order._id);
-
+    try {
+      await createInvoiceIfNeeded(order._id);
+    } catch (err) {
+      console.error("Invoice generation failed:", err.message);
+    }
     res.status(200).json({
       success: true,
       message: "Buy Now order placed successfully",
@@ -617,4 +658,3 @@ exports.razorpayWebhook = async (req, res) => {
     });
   }
 };
-

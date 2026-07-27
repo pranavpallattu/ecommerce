@@ -21,9 +21,9 @@ function validateCategoryData(req) {
     throw error;
   };
 
-  // ===========================
+  //
   // Required Fields
-  // ===========================
+  //
   if (!name?.trim()) {
     throwValidationError("Category name is required");
   }
@@ -35,9 +35,9 @@ function validateCategoryData(req) {
   const trimmedName = name.trim();
   const trimmedDescription = description.trim();
 
-  // ===========================
+  //
   // Category Name Validation
-  // ===========================
+  //
   const namePattern = /^[A-Za-z]+(?:\s[A-Za-z]+)*$/;
 
   if (!namePattern.test(trimmedName)) {
@@ -92,8 +92,7 @@ function validateCategoryData(req) {
 }
 
 function validateProductData(req, mode = "add") {
-  let pattern = /^[a-z0-9\s\-()]+$/i;
-
+  const pattern = /^[a-z0-9\s\-(),/]+$/i;
   const {
     productName,
     category,
@@ -104,23 +103,21 @@ function validateProductData(req, mode = "add") {
     offer,
   } = req.body;
 
-  // console.log(req.body);
-
   const files = req?.files;
 
-  console.log(files);
-
   // productName
+  const trimmedName = productName.trim();
+
   if (
-    !productName ||
-    productName.length < 3 ||
-    productName.length > 50 ||
-    !pattern.test(productName)
+    !trimmedName ||
+    trimmedName.length < 3 ||
+    trimmedName.length > 200 ||
+    !pattern.test(trimmedName)
   ) {
-    throw new Error("product name must have 3 to 50 characters");
+    throw new Error("Product name must contain 3 to 200 characters.");
   }
 
-  // 🟢 FIX: For edit, images are optional
+  //  FIX: For edit, images are optional
   if (mode === "add") {
     if (!files || files.length <= 0 || files.length > 4) {
       throw new Error("There should be at least one image and maximum of 4");
@@ -154,13 +151,10 @@ function validateProductData(req, mode = "add") {
   if (offer != null && (offer < 0 || offer > 100)) {
     throw new Error("Offer should be between 0 to 100");
   }
-
-  console.log("validation passed");
 }
 
 function validateEditProductData(req) {
-  const pattern = /^[a-z0-9\s\-()]+$/i;
-
+  const pattern = /^[a-z0-9\s\-(),/]+$/i;
   const {
     productName,
     category,
@@ -174,16 +168,15 @@ function validateEditProductData(req) {
 
   const files = req.files?.productImage || [];
 
-  // 1️⃣ Product name
+  const trimmedName = productName.trim();
+
   if (
-    !productName ||
-    productName.length < 3 ||
-    productName.length > 50 ||
-    !pattern.test(productName)
+    !trimmedName ||
+    trimmedName.length < 3 ||
+    trimmedName.length > 200 ||
+    !pattern.test(trimmedName)
   ) {
-    throw new Error(
-      "Product name must be 3–50 characters long and contain only letters, numbers, spaces, -, or ().",
-    );
+    throw new Error("Product name must contain 3 to 200 characters.");
   }
 
   // 2️⃣ Description
