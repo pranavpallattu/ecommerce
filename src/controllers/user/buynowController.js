@@ -68,13 +68,13 @@ exports.getBuyNowCheckout = async (req, res) => {
       });
     }
 
-   await refreshCheckoutCoupon(buyNow);
-await buyNow.save();
+    await refreshCheckoutCoupon(buyNow);
+    await buyNow.save();
 
-return res.json({
-    success:true,
-    checkout:buyNow
-});
+    return res.json({
+      success: true,
+      checkout: buyNow,
+    });
   } catch (error) {
     console.error("Checkout Error:", error);
     res.status(500).json({ success: false, message: "Server error" });

@@ -12,9 +12,9 @@ const { roundMoney } = require("../../utils/currency");
 
 exports.createOrder = async (req, res) => {
   try {
-    const { amount } = req.body;
-
     const { _id, name, emailId } = req.user;
+    const cart = await Cart.findOne({ userId: _id });
+    const amount = cart?.finalTotal;
     if (!amount || typeof amount !== "number" || amount <= 0) {
       return res.status(400).json({
         success: false,
@@ -319,6 +319,13 @@ exports.createBuyNowOrder = async (req, res) => {
     }
 
     const amount = buyNow.finalTotal;
+
+    if (!amount || typeof amount !== "number" || amount <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Valid amount is required",
+      });
+    }
 
     const order = await razorpayInstance.orders.create({
       amount: Math.round(amount * 100),

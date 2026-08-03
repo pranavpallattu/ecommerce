@@ -26,7 +26,10 @@ exports.getCouponController = async (req, res) => {
 
     const [totalCoupons, coupons] = await Promise.all([
       Coupon.countDocuments(searchQuery),
-      Coupon.find(searchQuery).sort({ createdAt: -1,_id:-1 }).skip(skip).limit(limit),
+      Coupon.find(searchQuery)
+        .sort({ createdAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(limit),
     ]);
 
     const totalPages = Math.ceil(totalCoupons / limit);
@@ -88,8 +91,6 @@ exports.addCouponController = async (req, res) => {
       usageLimit: parsedUsageLimit,
       perUserLimit: parsedPerUserLimit,
     };
-
-    console.log(couponData);
 
     try {
       validateCouponData(couponData);
@@ -243,7 +244,6 @@ exports.softDeleteCouponController = async (req, res) => {
         .json({ success: false, message: "coupon does not exists" });
     }
 
-    existingCoupon.isDeleted = true;
     existingCoupon.deletedAt = new Date();
     await existingCoupon.save();
     return res.status(200).json({
